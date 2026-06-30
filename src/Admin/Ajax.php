@@ -9,6 +9,7 @@ use OrchardGrove\OgWatermark\Pipeline\Outcome;
 use OrchardGrove\OgWatermark\Pipeline\Processor;
 use OrchardGrove\OgWatermark\Queue\BulkRunner;
 use OrchardGrove\OgWatermark\Settings\Options;
+use OrchardGrove\OgWatermark\Support\Capabilities;
 use OrchardGrove\OgWatermark\Support\Meta;
 
 /**
@@ -55,6 +56,13 @@ final class Ajax {
 	public const ACTION_BULK_START    = 'ogwm_bulk_start';
 	public const ACTION_BULK_PROGRESS = 'ogwm_bulk_progress';
 
+	/**
+	 * The "Re-detect engine" action name, shared with admin-settings.js via the
+	 * SettingsPage localize payload (same pattern as the bulk actions). Re-uses
+	 * {@see NONCE_ACTION} — there is one admin nonce for the whole AJAX layer.
+	 */
+	public const ACTION_REDETECT = 'ogwm_redetect_engine';
+
 	/** Preview rate-limit transient prefix; the per-user key appends the user id. */
 	private const PREVIEW_RL_PREFIX = 'ogwm_preview_rl_';
 
@@ -85,6 +93,7 @@ final class Ajax {
 		add_action( 'wp_ajax_' . self::ACTION_BULK_START, [ self::class, 'bulkStart' ] );
 		add_action( 'wp_ajax_' . self::ACTION_BULK_PROGRESS, [ self::class, 'bulkProgress' ] );
 		add_action( 'wp_ajax_ogwm_preview', [ self::class, 'preview' ] );
+		add_action( 'wp_ajax_' . self::ACTION_REDETECT, [ self::class, 'redetectEngine' ] );
 	}
 
 	// =====================================================================
@@ -243,11 +252,69 @@ final class Ajax {
 			);
 		}
 
-		// The data URL is "data:image/png;base64,<…>" — wholly plugin-generated, no
-		// path. esc_url keeps it safe to drop straight into an <img src>.
+		// The data URL is "data:image/png;base64,<…>" — wholly plugin-generated (the
+		// base64 of bytes the engine just encoded), with no path. esc_url_raw() must
+		// NOT be used here: the 'data' scheme is not in WordPress's allowed protocol
+		// list, so esc_url_raw() strips the whole value and the preview stays blank
+		// (the bug Feature 1 fixes). Instead {@see safeDataUrl()} validates it against
+		// a strict base64 image-data pattern and returns '' for anything that doesn't
+		// match, so it is safe to drop straight into an <img src> just like before.
 		wp_send_json_success(
 			[
-				'img_url' => esc_url_raw( isset( $result['data_url'] ) ? (string) $result['data_url'] : '' ),
+				'img_url' => self::safeDataUrl( isset( $result['data_url'] ) ? (string) $result['data_url'] : '' ),
+			]
+		);
+	}
+
+	/**
+	 * Pass a plugin-generated base64 image data URI through ONLY when it strictly
+	 * matches the shape we emit ("data:image/<png|jpeg|jpg|webp>;base64,<base64>"),
+	 * and '' otherwise. This is the safe alternative to esc_url_raw() for the
+	 * preview: esc_url_raw() drops every data: URL (the 'data' scheme is not an
+	 * allowed WordPress protocol), but a value validated to be nothing but a
+	 * base64-encoded image is safe to place in an <img src>. The whitelist of the
+	 * scheme/MIME + the base64 character class is the whole guard — anything with a
+	 * stray quote, angle bracket, or non-base64 byte fails the match and is dropped.
+	 */
+	private static function safeDataUrl( string $url ): string {
+		// The `\z` end-anchor with the `D` modifier matches the TRUE end of the
+		// subject — unlike a bare `$`, which in PCRE also matches immediately before
+		// a single trailing newline, letting a "data:image/png;base64,…\n" value
+		// slip through. This is defense-in-depth (the value is plugin-generated), but
+		// it keeps the whitelist exact: nothing may follow the base64 padding.
+		return 1 === preg_match( '#^data:image/(?:png|jpeg|jpg|webp);base64,[A-Za-z0-9+/]+={0,2}\z#iD', $url )
+			? $url
+			: '';
+	}
+
+	/**
+	 * Re-probe the host's image engine and return the fresh status.
+	 *
+	 * Why: {@see Capabilities} caches the probe in an option and only re-probes on a
+	 * plugin version change, so enabling/disabling an image extension mid-stream (the
+	 * exact case where Imagick was switched on after the plugin had already cached a
+	 * "GD" probe) was invisible until a version bump. This lets the admin force a
+	 * re-detect from the Engine status card, and the settings screen also re-probes
+	 * on load (see {@see SettingsPage}).
+	 *
+	 * Order (settings-class gate): cap manage_options → nonce → Capabilities::refresh
+	 * → return the ESCAPED status. There is no id to validate (this acts on the host,
+	 * not an attachment), so the order is the same two-gate shape as bulk/preview.
+	 */
+	public static function redetectEngine(): void {
+		self::requireManageOptions();
+		self::requireNonce();
+
+		$caps = Capabilities::refresh();
+
+		$driver = isset( $caps['driver'] ) && is_string( $caps['driver'] ) ? $caps['driver'] : 'none';
+
+		wp_send_json_success(
+			[
+				'driver'    => esc_html( $driver ),
+				'freetype'  => ! empty( $caps['freetype'] ),
+				'usable'    => 'none' !== $driver,
+				'text_mode' => ! empty( $caps['freetype'] ),
 			]
 		);
 	}

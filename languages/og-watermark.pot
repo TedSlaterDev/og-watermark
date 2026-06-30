@@ -2,9 +2,9 @@
 # This file is distributed under the GPL-2.0-or-later license.
 msgid ""
 msgstr ""
-"Project-Id-Version: OG Watermark 1.0.0\n"
+"Project-Id-Version: OG Watermark 1.1.0\n"
 "Report-Msgid-Bugs-To: https://orchardgrove.com/\n"
-"POT-Creation-Date: 2026-06-30 01:31+0000\n"
+"POT-Creation-Date: 2026-06-30 22:23+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -25,7 +25,7 @@ msgid "%1$s of %2$s processed"
 msgstr ""
 
 #. translators: 1: size name, 2: width, 3: height, 4: " (cropped)" or "".
-#: src/Admin/SettingsPage.php:729
+#: src/Admin/SettingsPage.php:781
 msgid "%1$s — %2$d×%3$d%4$s"
 msgstr ""
 
@@ -47,23 +47,23 @@ msgid_plural "%s images unflagged."
 msgstr[0] ""
 msgstr[1] ""
 
-#: src/Admin/SettingsPage.php:733
+#: src/Admin/SettingsPage.php:785
 msgid "(cropped)"
 msgstr ""
 
-#: src/Admin/Ajax.php:427
+#: src/Admin/Ajax.php:494
 msgid "A bulk run is already in progress."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:614
+#: src/Admin/SettingsPage.php:659
 msgid "Active driver"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:562
+#: src/Admin/SettingsPage.php:607
 msgid "Adjust a setting to render a preview."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:527
+#: src/Admin/SettingsPage.php:572
 msgid "Advanced"
 msgstr ""
 
@@ -71,11 +71,11 @@ msgstr ""
 msgid "All flagged images"
 msgstr ""
 
-#: src/Admin/Ajax.php:389
+#: src/Admin/Ajax.php:456
 msgid "Already up to date."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:541
+#: src/Admin/SettingsPage.php:586
 msgid "Also delete the pristine original backups on uninstall (destructive — cannot be undone)"
 msgstr ""
 
@@ -95,7 +95,7 @@ msgstr ""
 msgid "Applying…"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:620
+#: src/Admin/SettingsPage.php:167 src/Admin/SettingsPage.php:665
 msgid "Available"
 msgstr ""
 
@@ -103,7 +103,7 @@ msgstr ""
 msgid "Backup missing"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:579 src/Admin/BulkPage.php:207
+#: src/Admin/SettingsPage.php:624 src/Admin/BulkPage.php:207
 msgid "Backup storage"
 msgstr ""
 
@@ -111,39 +111,43 @@ msgstr ""
 msgid "Backups are the single source of truth — every apply or undo rebuilds from them, so watermarks never stack."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:369
+#: src/Admin/SettingsPage.php:414
 msgid "Bottom center"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:368
+#: src/Admin/SettingsPage.php:413
 msgid "Bottom left"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:370
+#: src/Admin/SettingsPage.php:415
 msgid "Bottom right"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:87 src/Admin/SettingsPage.php:199
+#: src/Admin/SettingsPage.php:95 src/Admin/SettingsPage.php:244
 msgid "Bulk Tools"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:265
+#: src/Admin/SettingsPage.php:310
 msgid "Choose a logo image or rendered text. The mark is baked into every served image size."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:464
+#: src/Admin/SettingsPage.php:509
 msgid "Choose which generated sizes get the watermark. Leave all checked to stamp every size, including the full-resolution file."
 msgstr ""
 
-#: src/Admin/Ajax.php:414
+#: src/Admin/SettingsPage.php:166
+msgid "Could not re-detect the engine."
+msgstr ""
+
+#: src/Admin/Ajax.php:481
 msgid "Could not remove the watermark."
 msgstr ""
 
-#: src/Admin/Ajax.php:241
+#: src/Admin/Ajax.php:250
 msgid "Could not render a preview with these settings."
 msgstr ""
 
-#: src/Admin/Ajax.php:431
+#: src/Admin/Ajax.php:498
 msgid "Could not start the bulk run."
 msgstr ""
 
@@ -151,19 +155,19 @@ msgstr ""
 msgid "Could not start the run."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:540
+#: src/Admin/SettingsPage.php:585
 msgid "Delete backups too"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:534
+#: src/Admin/SettingsPage.php:579
 msgid "Delete plugin settings and per-image data when the plugin is deleted"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:586
+#: src/Admin/SettingsPage.php:631
 msgid "Disk used"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:400
+#: src/Admin/SettingsPage.php:445
 msgid "Distance from the edge, as a percentage of the image's shorter side."
 msgstr ""
 
@@ -171,11 +175,11 @@ msgstr ""
 msgid "Done."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:324
+#: src/Admin/SettingsPage.php:369
 msgid "Drop shadow"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:590
+#: src/Admin/SettingsPage.php:635
 msgid "Each flagged image keeps one pristine master — the single source any watermark is rebuilt from."
 msgstr ""
 
@@ -183,7 +187,11 @@ msgstr ""
 msgid "Each image keeps a pristine, immutable backup of its original — so flagging a large library roughly doubles its media storage. The run checks free disk space before each backup and refuses if there is not enough room."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:610
+#: src/Admin/SettingsPage.php:165
+msgid "Engine re-detected."
+msgstr ""
+
+#: src/Admin/SettingsPage.php:655
 msgid "Engine status"
 msgstr ""
 
@@ -200,19 +208,19 @@ msgstr ""
 msgid "Flag and watermark every image. %s total — this can take a while and roughly doubles storage for each image (a pristine backup is kept)."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:214
+#: src/Admin/SettingsPage.php:259
 msgid "FreeType is not available, so text watermarks are disabled. Use a logo (PNG) instead. Everything else works normally."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:711
+#: src/Admin/SettingsPage.php:763
 msgid "Full size (the attached file)"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:604
+#: src/Admin/SettingsPage.php:155 src/Admin/SettingsPage.php:649
 msgid "GD"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:463
+#: src/Admin/SettingsPage.php:508
 msgid "Image sizes"
 msgstr ""
 
@@ -221,75 +229,75 @@ msgstr ""
 msgid "Images you have opted in (including any that are out of date). %s flagged."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:603
+#: src/Admin/SettingsPage.php:154 src/Admin/SettingsPage.php:648
 msgid "Imagick"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:502
+#: src/Admin/SettingsPage.php:547
 msgid "JPEG background"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:318
+#: src/Admin/SettingsPage.php:363
 msgid "Legibility treatment"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:559
+#: src/Admin/SettingsPage.php:604
 msgid "Live preview"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:271
+#: src/Admin/SettingsPage.php:316
 msgid "Logo (PNG)"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:283
+#: src/Admin/SettingsPage.php:328
 msgid "Logo image"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:418
+#: src/Admin/SettingsPage.php:463
 msgid "Logo scale"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:424
+#: src/Admin/SettingsPage.php:469
 msgid "Logo width as a percentage of the image width (logo mode)."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:428
+#: src/Admin/SettingsPage.php:473
 msgid "Logo width clamps"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:394
+#: src/Admin/SettingsPage.php:439
 msgid "Margin"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:433
+#: src/Admin/SettingsPage.php:478
 msgid "Max"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:366
+#: src/Admin/SettingsPage.php:411
 msgid "Middle center"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:365
+#: src/Admin/SettingsPage.php:410
 msgid "Middle left"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:367
+#: src/Admin/SettingsPage.php:412
 msgid "Middle right"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:430
+#: src/Admin/SettingsPage.php:475
 msgid "Min"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:208
+#: src/Admin/SettingsPage.php:253
 msgid "Neither Imagick nor GD is available on this server, so OG Watermark cannot stamp images. Ask your host to enable the Imagick or GD PHP extension. Settings are saved but no watermark can be applied until an engine is present."
 msgstr ""
 
-#: src/Admin/Ajax.php:412
+#: src/Admin/Ajax.php:479
 msgid "No backup is available to restore from."
 msgstr ""
 
-#: src/Admin/Ajax.php:395
+#: src/Admin/Ajax.php:462
 msgid "No clean backup is available, so this image cannot be watermarked."
 msgstr ""
 
@@ -297,15 +305,16 @@ msgstr ""
 msgid "No usable image engine (Imagick or GD) is available on this server, so watermarking is disabled. Install or enable an image library to use OG Watermark."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:207
+#: src/Admin/SettingsPage.php:252
 msgid "No usable image engine found."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:325 src/Admin/SettingsPage.php:605
+#: src/Admin/SettingsPage.php:156 src/Admin/SettingsPage.php:370
+#: src/Admin/SettingsPage.php:650
 msgid "None"
 msgstr ""
 
-#: src/Admin/Ajax.php:429
+#: src/Admin/Ajax.php:496
 msgid "Not enough disk space for the backups this run would create."
 msgstr ""
 
@@ -313,17 +322,17 @@ msgstr ""
 msgid "Not flagged"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:65 src/Admin/SettingsPage.php:66
-#: src/Admin/SettingsPage.php:186 src/Admin/SettingsPage.php:194
+#: src/Admin/SettingsPage.php:73 src/Admin/SettingsPage.php:74
+#: src/Admin/SettingsPage.php:231 src/Admin/SettingsPage.php:239
 #: src/Admin/MediaField.php:62
 msgid "OG Watermark"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:86
+#: src/Admin/SettingsPage.php:94
 msgid "OG Watermark Bulk Tools"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:76
+#: src/Admin/SettingsPage.php:84
 msgid "OG Watermark Settings"
 msgstr ""
 
@@ -332,11 +341,11 @@ msgid "OG Watermark is disabled: this server has neither Imagick nor GD with ima
 msgstr ""
 
 #. translators: %s: web-server software string.
-#: src/Backup/Storage.php:241
+#: src/Backup/Storage.php:243
 msgid "OG Watermark stored its pristine image backups inside the public web directory because your server (%s) does not honor the per-directory access rules the plugin writes. The folder name is randomized so it is not easily guessable, but for full protection add a server-level rule denying access to the og-watermark-originals folder, or move it above the web root."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:626
+#: src/Admin/SettingsPage.php:677
 msgid "OG Watermark v%s"
 msgstr ""
 
@@ -344,7 +353,7 @@ msgstr ""
 msgid "OG Watermark — Bulk Tools"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:515
+#: src/Admin/SettingsPage.php:560
 msgid "Off by default — zero front-end overhead. Turn on for stricter coverage during the brief processing window."
 msgstr ""
 
@@ -352,11 +361,11 @@ msgstr ""
 msgid "Once daily (OG Watermark maintenance)"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:443
+#: src/Admin/SettingsPage.php:488
 msgid "Opacity"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:582
+#: src/Admin/SettingsPage.php:627
 msgid "Originals backed up"
 msgstr ""
 
@@ -364,31 +373,31 @@ msgstr ""
 msgid "Out of date"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:323
+#: src/Admin/SettingsPage.php:368
 msgid "Outline / stroke"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:499
+#: src/Admin/SettingsPage.php:544
 msgid "Output"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:295
+#: src/Admin/SettingsPage.php:340
 msgid "PNG only — transparency is preserved. Re-verified each time it is used."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:187
+#: src/Admin/SettingsPage.php:232
 msgid "Pixel-baked watermarks with safe, restorable originals — by Orchard Grove Media"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:374
+#: src/Admin/SettingsPage.php:419
 msgid "Placement"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:377
+#: src/Admin/SettingsPage.php:422
 msgid "Position"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:148
+#: src/Admin/SettingsPage.php:162
 msgid "Preview unavailable."
 msgstr ""
 
@@ -413,7 +422,15 @@ msgstr ""
 msgid "Re-apply"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:293 src/Admin/MediaField.php:136
+#: src/Admin/SettingsPage.php:670
+msgid "Re-detect"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:164
+msgid "Re-detecting…"
+msgstr ""
+
+#: src/Admin/SettingsPage.php:338 src/Admin/MediaField.php:136
 msgid "Remove"
 msgstr ""
 
@@ -425,11 +442,11 @@ msgstr ""
 msgid "Removing…"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:564
+#: src/Admin/SettingsPage.php:609
 msgid "Rendered with the real engine on a sample image. Updates as you change settings."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:149
+#: src/Admin/SettingsPage.php:163
 msgid "Rendering preview…"
 msgstr ""
 
@@ -437,31 +454,31 @@ msgstr ""
 msgid "Resume run"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:233
+#: src/Admin/SettingsPage.php:278
 msgid "Save settings"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:292
+#: src/Admin/SettingsPage.php:337
 msgid "Select logo"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:145
+#: src/Admin/SettingsPage.php:159
 msgid "Select watermark logo"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:77 src/Admin/SettingsPage.php:196
+#: src/Admin/SettingsPage.php:85 src/Admin/SettingsPage.php:241
 msgid "Settings"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:487
+#: src/Admin/SettingsPage.php:532
 msgid "Sizes whose shorter edge is below this are left unmarked (thumbnails too small to carry a readable mark)."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:412
+#: src/Admin/SettingsPage.php:457
 msgid "Sizing & opacity"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:484
+#: src/Admin/SettingsPage.php:529
 msgid "Skip below"
 msgstr ""
 
@@ -469,7 +486,7 @@ msgstr ""
 msgid "Skipped"
 msgstr ""
 
-#: src/Admin/Ajax.php:221
+#: src/Admin/Ajax.php:230
 msgid "Slow down a moment — the preview is rate-limited."
 msgstr ""
 
@@ -485,39 +502,39 @@ msgstr ""
 msgid "Storage used"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:276
+#: src/Admin/SettingsPage.php:321
 msgid "Text"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:314
+#: src/Admin/SettingsPage.php:359
 msgid "Text color"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:619
+#: src/Admin/SettingsPage.php:664
 msgid "Text mode"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:344
+#: src/Admin/SettingsPage.php:389
 msgid "Text size"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:304
+#: src/Admin/SettingsPage.php:349
 msgid "Text template"
 msgstr ""
 
-#: src/Admin/Ajax.php:275
+#: src/Admin/Ajax.php:342
 msgid "That is not a valid image attachment."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:480
+#: src/Admin/SettingsPage.php:525
 msgid "The \"full\" size is the attached file (the -scaled derivative for big images). The clean original is always backed up first."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:543
+#: src/Admin/SettingsPage.php:588
 msgid "The backups are your only clean masters. Removing them makes every watermark permanent."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:566
+#: src/Admin/SettingsPage.php:611
 msgid "The preview needs an image engine (Imagick or GD), which is not available on this server."
 msgstr ""
 
@@ -525,27 +542,27 @@ msgstr ""
 msgid "The request failed. Please try again."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:436
+#: src/Admin/SettingsPage.php:481
 msgid "The scaled logo width is clamped to this range."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:147
+#: src/Admin/SettingsPage.php:161
 msgid "The watermark logo must be a PNG with transparency."
 msgstr ""
 
-#: src/Admin/Ajax.php:397
+#: src/Admin/Ajax.php:464
 msgid "This attachment was skipped."
 msgstr ""
 
-#: src/Admin/Ajax.php:391 src/Admin/Ajax.php:410
+#: src/Admin/Ajax.php:458 src/Admin/Ajax.php:477
 msgid "This image is being processed — try again shortly."
 msgstr ""
 
-#: src/Admin/Ajax.php:393
+#: src/Admin/Ajax.php:460
 msgid "This image is too large to watermark on this server."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:308
+#: src/Admin/SettingsPage.php:353
 msgid "Tokens:"
 msgstr ""
 
@@ -553,35 +570,35 @@ msgstr ""
 msgid "Too large"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:363
+#: src/Admin/SettingsPage.php:408
 msgid "Top center"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:362
+#: src/Admin/SettingsPage.php:407
 msgid "Top left"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:364
+#: src/Admin/SettingsPage.php:409
 msgid "Top right"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:505
+#: src/Admin/SettingsPage.php:550
 msgid "Transparent areas are flattened onto this color when encoding JPEG."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:337
+#: src/Admin/SettingsPage.php:382
 msgid "Treatment color"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:620
+#: src/Admin/SettingsPage.php:168 src/Admin/SettingsPage.php:665
 msgid "Unavailable"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:533
+#: src/Admin/SettingsPage.php:578
 msgid "Uninstall"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:146
+#: src/Admin/SettingsPage.php:160
 msgid "Use this image"
 msgstr ""
 
@@ -589,15 +606,15 @@ msgstr ""
 msgid "Watermark"
 msgstr ""
 
-#: src/Admin/Ajax.php:387
+#: src/Admin/Ajax.php:454
 msgid "Watermark applied."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:379
+#: src/Admin/SettingsPage.php:424
 msgid "Watermark position"
 msgstr ""
 
-#: src/Admin/Ajax.php:408
+#: src/Admin/Ajax.php:475
 msgid "Watermark removed; the original was restored."
 msgstr ""
 
@@ -605,7 +622,7 @@ msgstr ""
 msgid "Watermark this image"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:264 src/Admin/SettingsPage.php:267
+#: src/Admin/SettingsPage.php:309 src/Admin/SettingsPage.php:312
 msgid "Watermark type"
 msgstr ""
 
@@ -613,11 +630,11 @@ msgstr ""
 msgid "Watermarked"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:467
+#: src/Admin/SettingsPage.php:512
 msgid "Watermarked sizes"
 msgstr ""
 
-#: src/Admin/Ajax.php:400
+#: src/Admin/Ajax.php:467
 msgid "Watermarking failed. See the status column for details."
 msgstr ""
 
@@ -629,31 +646,31 @@ msgstr ""
 msgid "What should I process?"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:513
+#: src/Admin/SettingsPage.php:558
 msgid "While an image is mid-processing, hide its not-yet-stamped sizes from srcset"
 msgstr ""
 
-#: src/Admin/Ajax.php:323
+#: src/Admin/Ajax.php:390
 msgid "You are not allowed to do that."
 msgstr ""
 
-#: src/Admin/Ajax.php:312
+#: src/Admin/Ajax.php:379
 msgid "Your session expired. Reload the page and try again."
 msgstr ""
 
-#: src/Admin/SettingsPage.php:628
+#: src/Admin/SettingsPage.php:680
 msgid "by Orchard Grove Media, LLC"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:431 src/Admin/SettingsPage.php:434
-#: src/Admin/SettingsPage.php:486
+#: src/Admin/SettingsPage.php:476 src/Admin/SettingsPage.php:479
+#: src/Admin/SettingsPage.php:531
 msgid "px"
 msgstr ""
 
-#: src/Admin/SettingsPage.php:512
+#: src/Admin/SettingsPage.php:557
 msgid "srcset coherence"
 msgstr ""
 
-#: src/Backup/Storage.php:242
+#: src/Backup/Storage.php:244
 msgid "unknown"
 msgstr ""

@@ -205,4 +205,82 @@
 			input.addEventListener( evt, schedulePreview );
 		}
 	);
+
+	// ---- Re-detect engine ---------------------------------------------------
+
+	var redetectBtn = document.getElementById( 'ogwm-redetect' );
+	var redetectMsg = document.getElementById( 'ogwm-redetect-status' );
+	var driverLabels = cfg.driverLabels || {};
+	var redetecting = false;
+
+	function setRedetectMessage( msg ) {
+		if ( redetectMsg ) {
+			redetectMsg.textContent = msg || '';
+		}
+	}
+
+	// Update the Engine status card DOM from the redetect response so the user sees
+	// the fresh driver / text-mode without a page reload.
+	function applyEngineStatus( data ) {
+		var card = document.getElementById( 'ogwm-engine-status' );
+		if ( ! card || ! data ) {
+			return;
+		}
+		var driver = data.driver || 'none';
+		var driverVal = card.querySelector( '[data-ogwm-status="driver"]' );
+		var driverDot = card.querySelector( '[data-ogwm-status="driver-dot"]' );
+		var textVal = card.querySelector( '[data-ogwm-status="text"]' );
+		var textDot = card.querySelector( '[data-ogwm-status="text-dot"]' );
+
+		if ( driverVal ) {
+			driverVal.textContent = driverLabels[ driver ] || driverLabels.none || driver;
+		}
+		if ( driverDot ) {
+			driverDot.classList.toggle( 'is-on', !! data.usable );
+		}
+		if ( textVal ) {
+			textVal.textContent = data.text_mode
+				? ( i18n.textAvailable || 'Available' )
+				: ( i18n.textUnavailable || 'Unavailable' );
+		}
+		if ( textDot ) {
+			textDot.classList.toggle( 'is-on', !! data.text_mode );
+		}
+	}
+
+	if ( redetectBtn && cfg.ajaxUrl && cfg.nonce && cfg.redetectAction ) {
+		redetectBtn.addEventListener( 'click', function ( e ) {
+			e.preventDefault();
+			if ( redetecting ) {
+				return;
+			}
+			redetecting = true;
+			redetectBtn.disabled = true;
+			setRedetectMessage( i18n.redetecting || 'Re-detecting…' );
+
+			var data = new FormData();
+			data.append( 'action', cfg.redetectAction );
+			data.append( 'nonce', cfg.nonce );
+
+			window.fetch( cfg.ajaxUrl, {
+				method: 'POST',
+				credentials: 'same-origin',
+				body: data
+			} ).then( function ( res ) {
+				return res.json();
+			} ).then( function ( json ) {
+				if ( json && json.success && json.data ) {
+					applyEngineStatus( json.data );
+					setRedetectMessage( i18n.redetectDone || 'Engine re-detected.' );
+				} else {
+					setRedetectMessage( i18n.redetectError || 'Could not re-detect the engine.' );
+				}
+			} ).catch( function () {
+				setRedetectMessage( i18n.redetectError || 'Could not re-detect the engine.' );
+			} ).then( function () {
+				redetecting = false;
+				redetectBtn.disabled = false;
+			} );
+		} );
+	}
 }() );

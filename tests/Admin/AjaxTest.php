@@ -136,6 +136,7 @@ final class AjaxTest extends TestCase {
 		$this->assertArrayHasKey( 'wp_ajax_ogwm_bulk_start', $hooks );
 		$this->assertArrayHasKey( 'wp_ajax_ogwm_bulk_progress', $hooks );
 		$this->assertArrayHasKey( 'wp_ajax_ogwm_preview', $hooks );
+		$this->assertArrayHasKey( 'wp_ajax_ogwm_redetect_engine', $hooks );
 	}
 
 	// =====================================================================
@@ -586,6 +587,148 @@ final class AjaxTest extends TestCase {
 		$second = $this->capture( [ Ajax::class, 'preview' ] );
 		$this->assertFalse( $second->success );
 		$this->assertSame( 'rate-limited', $second->data['reason'], 'a failing render must still consume the rate-limit window' );
+	}
+
+	// =====================================================================
+	// FEATURE 1: the live-preview data: URL is passed through (NOT esc_url_raw'd).
+	// =====================================================================
+
+	public function testPreviewReturnsANonEmptyDataImageUrl(): void {
+		// The regression Feature 1 fixes: the rendered image is returned as a base64
+		// data: URL that previously got stripped by esc_url_raw (the 'data' scheme is
+		// not an allowed WP protocol) so img_url was ALWAYS empty and the preview never
+		// displayed. With the safeDataUrl pass-through the URL must arrive intact and
+		// non-empty, beginning 'data:image/'. To prove the handler does NOT lean on
+		// esc_url_raw, make esc_url_raw STRIP every data: URL the way real WordPress
+		// does — the preview must still return the URL.
+		Functions\when( 'esc_url_raw' )->alias(
+			static fn( $url ) => 0 === strpos( (string) $url, 'data:' ) ? '' : $url
+		);
+
+		$this->primeAdminPreviewEnv();
+		$_POST = [
+			'settings' => [
+				'watermark' => [ 'type' => 'text', 'text' => 'Hi', 'text_scale_pct' => 6 ],
+			],
+		];
+
+		$resp = $this->capture( [ Ajax::class, 'preview' ] );
+
+		$this->assertTrue( $resp->success );
+		$this->assertNotEmpty( $resp->data['img_url'], 'the preview data URL must NOT be empty (the Feature 1 bug)' );
+		$this->assertStringStartsWith( 'data:image/', $resp->data['img_url'] );
+	}
+
+	public function testSafeDataUrlAcceptsAValidBase64ImageAndRejectsAnythingElse(): void {
+		$safe = new \ReflectionMethod( Ajax::class, 'safeDataUrl' );
+
+		// A real plugin-shaped data URL (base64 of a 1x1 PNG) passes through verbatim.
+		$valid = 'data:image/png;base64,' . base64_encode( 'pretend-png-bytes' );
+		$this->assertSame( $valid, $safe->invoke( null, $valid ) );
+
+		// JPEG/WEBP variants (and the jpg alias) pass too — the engine can emit any
+		// of these MIMEs, so the whole whitelist must be exercised on the accept side.
+		$jpeg = 'data:image/jpeg;base64,' . base64_encode( 'x' );
+		$this->assertSame( $jpeg, $safe->invoke( null, $jpeg ) );
+		$jpg = 'data:image/jpg;base64,' . base64_encode( 'x' );
+		$this->assertSame( $jpg, $safe->invoke( null, $jpg ) );
+		$webp = 'data:image/webp;base64,' . base64_encode( 'x' );
+		$this->assertSame( $webp, $safe->invoke( null, $webp ) );
+
+		// Everything that is NOT a clean base64 image data URI is dropped to ''.
+		$rejects = [
+			'',
+			'not a url',
+			'https://example.com/x.png',
+			'javascript:alert(1)',
+			'data:text/html;base64,PHNjcmlwdD4=',                         // wrong MIME family.
+			'data:image/png;base64,abc"><script>alert(1)</script>',       // stray markup after base64.
+			'data:image/svg+xml;base64,PHN2Zz4=',                         // svg is not whitelisted.
+			'data:image/png,plain',                                       // not base64.
+			"data:image/png;base64,YWJj\n",                               // a trailing newline must not straddle the anchor.
+		];
+		foreach ( $rejects as $bad ) {
+			$this->assertSame( '', $safe->invoke( null, $bad ), "must reject: $bad" );
+		}
+	}
+
+	// =====================================================================
+	// FEATURE 3: redetectEngine enforces manage_options → nonce, then refreshes.
+	// =====================================================================
+
+	public function testRedetectEngineRejectsNonAdminBeforeNonce(): void {
+		Functions\expect( 'current_user_can' )->once()->with( 'manage_options' )->andReturn( false );
+		Functions\expect( 'check_ajax_referer' )->never();
+
+		$resp = $this->capture( [ Ajax::class, 'redetectEngine' ] );
+
+		$this->assertFalse( $resp->success );
+		$this->assertSame( 'forbidden', $resp->data['reason'] );
+	}
+
+	public function testRedetectEngineRejectsBadNonceForAnAdmin(): void {
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\expect( 'check_ajax_referer' )
+			->once()
+			->with( 'ogwm_admin', 'nonce', false )
+			->andReturn( false );
+
+		$resp = $this->capture( [ Ajax::class, 'redetectEngine' ] );
+
+		$this->assertFalse( $resp->success );
+		$this->assertSame( 'bad-nonce', $resp->data['reason'] );
+	}
+
+	public function testRedetectEngineRefreshesAndReturnsTheEscapedStatusShape(): void {
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\when( 'check_ajax_referer' )->justReturn( true );
+
+		// Capabilities::refresh() re-probes the REAL host and PERSISTS via update_option.
+		// Both engines are installed in this environment, so the fresh report is a real,
+		// usable driver — we assert the SHAPE the handler escapes/returns, and that the
+		// refreshed report was persisted to the capabilities option (proving refresh ran,
+		// not a stale read).
+		$resp = $this->capture( [ Ajax::class, 'redetectEngine' ] );
+
+		$this->assertTrue( $resp->success );
+		// The exact status shape the JS consumes.
+		$this->assertArrayHasKey( 'driver', $resp->data );
+		$this->assertArrayHasKey( 'freetype', $resp->data );
+		$this->assertArrayHasKey( 'usable', $resp->data );
+		$this->assertArrayHasKey( 'text_mode', $resp->data );
+		$this->assertIsString( $resp->data['driver'] );
+		$this->assertIsBool( $resp->data['freetype'] );
+		$this->assertIsBool( $resp->data['usable'] );
+		$this->assertIsBool( $resp->data['text_mode'] );
+		$this->assertContains( $resp->data['driver'], [ 'imagick', 'gd', 'none' ] );
+		// usable is true exactly when the driver is not 'none'.
+		$this->assertSame( 'none' !== $resp->data['driver'], $resp->data['usable'] );
+
+		// freetype and text_mode are emitted from the same probe value; lock the
+		// invariant so the two keys can never silently diverge.
+		$this->assertSame( $resp->data['freetype'], $resp->data['text_mode'], 'freetype and text_mode must mirror the same probe value' );
+
+		// refresh() persisted a fresh, real-shaped report to the option (the re-probe ran).
+		$this->assertArrayHasKey( Capabilities::OPTION, $this->options );
+		$persisted = $this->options[ Capabilities::OPTION ];
+		$this->assertSame( $persisted['driver'], $resp->data['driver'] );
+		$this->assertArrayHasKey( 'probed_gmt', $persisted );
+	}
+
+	public function testRedetectEngineEscapesTheDriverThroughEscHtml(): void {
+		Functions\when( 'current_user_can' )->justReturn( true );
+		Functions\when( 'check_ajax_referer' )->justReturn( true );
+
+		// Override the TestCase's returnArg(1) esc_html stub with a marking alias so
+		// we can PROVE the returned driver actually passed through esc_html() (the
+		// handler's docblock promises an ESCAPED status). Without this the value
+		// would be indistinguishable from an unescaped pass-through.
+		Functions\when( 'esc_html' )->alias( static fn( $s ) => 'ESC:' . (string) $s );
+
+		$resp = $this->capture( [ Ajax::class, 'redetectEngine' ] );
+
+		$this->assertTrue( $resp->success );
+		$this->assertStringStartsWith( 'ESC:', (string) $resp->data['driver'], 'the driver must be escaped via esc_html()' );
 	}
 
 	// =====================================================================

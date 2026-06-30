@@ -349,7 +349,7 @@ function renderPot( array $entries ): string {
 # This file is distributed under the GPL-2.0-or-later license.
 msgid ""
 msgstr ""
-"Project-Id-Version: OG Watermark 1.0.0\\n"
+"Project-Id-Version: OG Watermark 1.1.0\\n"
 "Report-Msgid-Bugs-To: https://orchardgrove.com/\\n"
 "POT-Creation-Date: {$date}\\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\\n"

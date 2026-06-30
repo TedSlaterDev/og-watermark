@@ -9,6 +9,7 @@ use OrchardGrove\OgWatermark\Backup\Manager;
 use OrchardGrove\OgWatermark\Engine\Compositor;
 use OrchardGrove\OgWatermark\Engine\LogoAsset;
 use OrchardGrove\OgWatermark\Engine\Result;
+use OrchardGrove\OgWatermark\Integration\CachePurge;
 use OrchardGrove\OgWatermark\Settings\Options;
 use OrchardGrove\OgWatermark\Support\Lock;
 use OrchardGrove\OgWatermark\Support\Meta;
@@ -231,6 +232,12 @@ final class Processor {
 		update_post_meta( $id, Meta::APPLIED_GMT, gmdate( 'c' ) );
 		delete_post_meta( $id, Meta::LAST_ERROR );
 
+		// 11c) The watermark is baked into the existing files at their existing URLs,
+		//      so any cache keyed on those URLs is now serving stale pre-watermark
+		//      bytes. Flush THIS attachment's cached URLs. Best-effort + self-guarded:
+		//      CachePurge never throws, so this can never fail the committed run.
+		CachePurge::purgeAttachment( $id );
+
 		return Outcome::watermarked( $staged['sizesStamped'] );
 	}
 
@@ -391,6 +398,11 @@ final class Processor {
 			delete_post_meta( $id, Meta::LAST_ERROR );
 			update_post_meta( $id, Meta::STATUS, Meta::STATUS_RESTORED );
 			delete_post_meta( $id, Meta::ENABLED );
+
+			// The clean (un-watermarked) files now sit at the same URLs the
+			// watermarked bytes were served from, so the cache must be flushed for
+			// the restore to be visible too. Same best-effort, self-guarded purge.
+			CachePurge::purgeAttachment( $id );
 
 			return Outcome::restored();
 		} finally {

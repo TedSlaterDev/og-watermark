@@ -46,6 +46,14 @@ final class SettingsPage {
 	/** Stylesheet/script handle base. */
 	private const HANDLE = 'ogwm-admin';
 
+	/**
+	 * How stale (in seconds) the cached engine probe may be before the settings
+	 * screen re-probes on render. Short enough that toggling an extension and
+	 * reloading the page reflects it; long enough that a rapid reload doesn't
+	 * re-probe every hit. The "Re-detect" button bypasses this entirely.
+	 */
+	private const CAPS_REFRESH_TTL = 60;
+
 	/** Wire the menu, the setting, and the gated assets. */
 	public static function register(): void {
 		$page = new self();
@@ -138,18 +146,47 @@ final class SettingsPage {
 			self::HANDLE . '-settings',
 			'ogwmSettings',
 			[
-				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
-				'nonce'   => wp_create_nonce( 'ogwm_admin' ),
-				'option'  => Options::OPTION,
-				'i18n'    => [
-					'selectLogo'   => __( 'Select watermark logo', 'og-watermark' ),
-					'useImage'     => __( 'Use this image', 'og-watermark' ),
-					'pngOnly'      => __( 'The watermark logo must be a PNG with transparency.', 'og-watermark' ),
-					'previewError' => __( 'Preview unavailable.', 'og-watermark' ),
-					'previewWait'  => __( 'Rendering preview…', 'og-watermark' ),
+				'ajaxUrl'         => admin_url( 'admin-ajax.php' ),
+				'nonce'           => wp_create_nonce( 'ogwm_admin' ),
+				'option'          => Options::OPTION,
+				'redetectAction'  => Ajax::ACTION_REDETECT,
+				'driverLabels'    => [
+					'imagick' => __( 'Imagick', 'og-watermark' ),
+					'gd'      => __( 'GD', 'og-watermark' ),
+					'none'    => __( 'None', 'og-watermark' ),
+				],
+				'i18n'            => [
+					'selectLogo'     => __( 'Select watermark logo', 'og-watermark' ),
+					'useImage'       => __( 'Use this image', 'og-watermark' ),
+					'pngOnly'        => __( 'The watermark logo must be a PNG with transparency.', 'og-watermark' ),
+					'previewError'   => __( 'Preview unavailable.', 'og-watermark' ),
+					'previewWait'    => __( 'Rendering preview…', 'og-watermark' ),
+					'redetecting'    => __( 'Re-detecting…', 'og-watermark' ),
+					'redetectDone'   => __( 'Engine re-detected.', 'og-watermark' ),
+					'redetectError'  => __( 'Could not re-detect the engine.', 'og-watermark' ),
+					'textAvailable'  => __( 'Available', 'og-watermark' ),
+					'textUnavailable' => __( 'Unavailable', 'og-watermark' ),
 				],
 			]
 		);
+	}
+
+	/**
+	 * Re-probe the host engine on the settings screen when the cached report is
+	 * older than {@see CAPS_REFRESH_TTL} (or has no timestamp). Called ONLY from
+	 * render(), which only runs for this plugin's settings page — so the re-probe
+	 * stays scoped to the one screen and never hits the front end or other admin
+	 * pages. Cheap: it reads the cached probed_gmt and skips the re-probe when the
+	 * report is still fresh.
+	 */
+	private function maybeRefreshCapabilities(): void {
+		$caps  = Capabilities::get();
+		$probed = isset( $caps['probed_gmt'] ) && is_string( $caps['probed_gmt'] ) ? $caps['probed_gmt'] : '';
+		$age    = '' === $probed ? PHP_INT_MAX : ( time() - (int) strtotime( $probed ) );
+
+		if ( $age < 0 || $age >= self::CAPS_REFRESH_TTL ) {
+			Capabilities::refresh();
+		}
 	}
 
 	/** Whether $hook is one of our plugin's own admin screens. */
@@ -171,6 +208,14 @@ final class SettingsPage {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
+
+		// Re-probe the host so the Engine status card (and the stamp path) reflect an
+		// image extension enabled/disabled since the probe was last cached — without
+		// requiring a plugin version bump. Scoped strictly to THIS settings screen
+		// render (never every admin page, never the front end); throttled to a short
+		// TTL so a rapid reload doesn't re-probe on every hit. The "Re-detect" button
+		// forces a refresh on demand via the redetect AJAX handler.
+		$this->maybeRefreshCapabilities();
 
 		$options = new Options();
 		$caps    = Capabilities::get();
@@ -606,20 +651,26 @@ final class SettingsPage {
 		];
 		$freetype = ! empty( $caps['freetype'] );
 		?>
-		<div class="ogwm-card ogwm-aside">
+		<div class="ogwm-card ogwm-aside ogwm-engine-card" id="ogwm-engine-status">
 			<h2><?php esc_html_e( 'Engine status', 'og-watermark' ); ?></h2>
 			<ul class="ogwm-glance">
 				<li>
-					<span class="ogwm-dot<?php echo 'none' === $driver ? '' : ' is-on'; ?>" aria-hidden="true"></span>
+					<span class="ogwm-dot<?php echo 'none' === $driver ? '' : ' is-on'; ?>" aria-hidden="true" data-ogwm-status="driver-dot"></span>
 					<span class="label"><?php esc_html_e( 'Active driver', 'og-watermark' ); ?></span>
-					<span class="value"><?php echo esc_html( $labels[ $driver ] ?? $labels['none'] ); ?></span>
+					<span class="value" data-ogwm-status="driver"><?php echo esc_html( $labels[ $driver ] ?? $labels['none'] ); ?></span>
 				</li>
 				<li>
-					<span class="ogwm-dot<?php echo $freetype ? ' is-on' : ''; ?>" aria-hidden="true"></span>
+					<span class="ogwm-dot<?php echo $freetype ? ' is-on' : ''; ?>" aria-hidden="true" data-ogwm-status="text-dot"></span>
 					<span class="label"><?php esc_html_e( 'Text mode', 'og-watermark' ); ?></span>
-					<span class="value"><?php echo esc_html( $freetype ? __( 'Available', 'og-watermark' ) : __( 'Unavailable', 'og-watermark' ) ); ?></span>
+					<span class="value" data-ogwm-status="text"><?php echo esc_html( $freetype ? __( 'Available', 'og-watermark' ) : __( 'Unavailable', 'og-watermark' ) ); ?></span>
 				</li>
 			</ul>
+			<p class="ogwm-engine-actions">
+				<button type="button" class="button button-secondary" id="ogwm-redetect">
+					<span class="dashicons dashicons-update" aria-hidden="true"></span><?php esc_html_e( 'Re-detect', 'og-watermark' ); ?>
+				</button>
+				<span class="ogwm-redetect-status" id="ogwm-redetect-status" role="status" aria-live="polite"></span>
+			</p>
 			<p class="ogwm-aside-foot">
 				<?php
 				/* translators: %s: version number. */

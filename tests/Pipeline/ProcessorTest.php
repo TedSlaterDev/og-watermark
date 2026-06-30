@@ -65,6 +65,9 @@ final class ProcessorTest extends TestCase {
 	/** @var array<int,string> wp_get_original_image_path() return per id (the true original). */
 	private array $originalPath = [];
 
+	/** @var array<int,int> Recorded CachePurge clean_post_cache() ids (purge-fired probe). */
+	private array $cachePurges = [];
+
 	/** Settings array Options reads back from get_option('ogwm_settings'). */
 	private array $settings = [];
 
@@ -116,6 +119,7 @@ final class ProcessorTest extends TestCase {
 		$this->attachmentMeta = [];
 		$this->attachedFile   = [];
 		$this->originalPath   = [];
+		$this->cachePurges    = [];
 		unset( $GLOBALS['wpdb'] );
 		parent::tearDown();
 	}
@@ -655,6 +659,64 @@ final class ProcessorTest extends TestCase {
 	}
 
 	// =====================================================================
+	// Cache purge — fires on a successful (re)stamp / restore, never on a no-op.
+	// =====================================================================
+
+	public function testSuccessfulProcessPurgesTheAttachmentCache(): void {
+		$id = 70;
+		$this->seedSmallImageAttachment( $id );
+		$this->flag( $id );
+
+		$outcome = ( new Processor( $this->fakeRegenerator() ) )->process( $id, 'flag' );
+
+		$this->assertSame( Outcome::WATERMARKED, $outcome->status );
+		$this->assertContains(
+			$id,
+			$this->cachePurges,
+			'a successful watermark must purge that attachment (clean_post_cache fired for its id)'
+		);
+	}
+
+	public function testSuccessfulRestorePurgesTheAttachmentCache(): void {
+		$id = 71;
+		$this->seedSmallImageAttachment( $id );
+		$this->flag( $id );
+
+		// Apply, then clear the purge probe so we only observe the restore's purge.
+		( new Processor( $this->fakeRegenerator() ) )->process( $id, 'flag' );
+		$this->cachePurges = [];
+
+		$outcome = ( new Processor( $this->fakeRegenerator() ) )->restore( $id );
+
+		$this->assertSame( Outcome::RESTORED, $outcome->status );
+		$this->assertContains(
+			$id,
+			$this->cachePurges,
+			'a successful restore must purge that attachment so the clean files are served'
+		);
+	}
+
+	public function testNoopDoesNotPurgeTheAttachmentCache(): void {
+		$id = 72;
+		$this->seedSmallImageAttachment( $id );
+		$this->flag( $id );
+
+		// First apply lands the signature (and purges). Clear the probe.
+		( new Processor( $this->fakeRegenerator() ) )->process( $id, 'flag' );
+		$this->cachePurges = [];
+
+		// A second, unchanged run short-circuits to a no-op BEFORE any commit.
+		$outcome = ( new Processor( $this->fakeRegenerator() ) )->process( $id, 'settings-change' );
+
+		$this->assertSame( Outcome::NOOP, $outcome->status );
+		$this->assertSame(
+			[],
+			$this->cachePurges,
+			'a no-op changes nothing on disk, so it must NOT purge the cache'
+		);
+	}
+
+	// =====================================================================
 	// Non-image + not-flagged skips.
 	// =====================================================================
 
@@ -1167,6 +1229,23 @@ final class ProcessorTest extends TestCase {
 		Functions\when( 'OrchardGrove\OgWatermark\Backup\rename' )->alias(
 			static fn( string $a, string $b ): bool => rename( $a, $b )
 		);
+
+		// --- CachePurge seam (fired after a successful (re)stamp / restore). The
+		//     purge is self-guarded, but stub its WP calls so it records cleanly
+		//     instead of swallowing an unmocked-function throw. clean_post_cache is
+		//     the probe these tests assert on; no host plugins are present
+		//     (has_action → false, no rocket_*/w3tc_* functions), so the purge does
+		//     nothing beyond the core clean + the generic extension actions. ---
+		Functions\when( 'clean_post_cache' )->alias(
+			function ( $id ): void {
+				$this->cachePurges[] = (int) $id;
+			}
+		);
+		Functions\when( 'wp_get_attachment_url' )->alias(
+			fn( $id ) => $this->attachedFile[ (int) $id ] ?? false
+		);
+		Functions\when( 'has_action' )->justReturn( false );
+		Functions\when( 'do_action' )->justReturn( null );
 
 		// --- engine token resolution + filters (logo mode needs none of these, but
 		//     they are harmless and keep text-mode paths from fataling if reached). ---

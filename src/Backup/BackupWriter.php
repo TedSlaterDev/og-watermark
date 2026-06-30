@@ -253,6 +253,16 @@ final class BackupWriter {
 			return false;
 		}
 
+		// fsync() exists on PHP 8.1+, but some managed hosts DISABLE it via
+		// disable_functions — calling a disabled function fatals (the @ does not
+		// suppress that). Skip the flush when it is unavailable; copyVerified()'s
+		// mandatory full sha1 still enforces correctness, so durability degrades
+		// without ever admitting a corrupt backup.
+		if ( ! function_exists( 'fsync' ) ) {
+			@fclose( $handle ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions
+			return false;
+		}
+
 		$ok = @fsync( $handle ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- fsync failure (e.g. unsupported FS) is non-fatal; the sha1 gate enforces correctness.
 
 		@fclose( $handle ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions
@@ -274,7 +284,9 @@ final class BackupWriter {
 			return;
 		}
 
-		@fsync( $handle ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- advisory; not all filesystems support directory fsync.
+		if ( function_exists( 'fsync' ) ) { // Guard: some managed hosts disable fsync() (calling it would fatal).
+			@fsync( $handle ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- advisory; not all filesystems support directory fsync.
+		}
 		@fclose( $handle ); // phpcs:ignore WordPress.PHP.NoSilencedErrors, WordPress.WP.AlternativeFunctions
 	}
 

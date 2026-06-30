@@ -177,14 +177,34 @@ final class LockTest extends TestCase {
 		$token = Lock::acquire( self::KEY, 300 );
 		$this->assertIsString( $token );
 
-		// Wrong token cannot refresh.
+		// A wrong token (while WE are the stored owner) cannot refresh.
 		$this->assertFalse( Lock::refresh( self::KEY, 'someone-else', 300 ) );
 
 		// Right token refreshes.
 		$this->assertTrue( Lock::refresh( self::KEY, $token, 300 ) );
+		// (Cache-backend self-heal when our value is evicted is its own test below.)
+	}
 
-		// Refreshing a key nobody holds is false.
-		$this->assertFalse( Lock::refresh( 'ogwm_lock_unheld', $token, 300 ) );
+	public function testCacheRefreshSelfHealsWhenTheBackendDroppedOurValue(): void {
+		// Persistent-cache backend (the default for this group of tests).
+		$token = Lock::acquire( self::KEY, 300 );
+		$this->assertIsString( $token );
+
+		// A flaky/evicting persistent object cache drops our value mid-request, well
+		// within the TTL — the exact failure that aborted every watermark on a real
+		// host with reason "lock-lost". With no competing owner, the heartbeat must
+		// self-heal (re-assert our lock), NOT report a lost lock.
+		$this->cache = [];
+		$this->assertTrue( Lock::refresh( self::KEY, $token, 300 ), 'eviction with no competing owner must self-heal, not fail' );
+		$this->assertTrue( Lock::held( self::KEY ), 'the re-asserted lock is held again' );
+
+		// But a genuinely reclaimed key (a DIFFERENT live owner) must STILL fail the
+		// original owner's heartbeat — the self-heal never steals another owner's lock.
+		$this->cache = [];
+		$other = Lock::acquire( self::KEY, 300 );
+		$this->assertIsString( $other );
+		$this->assertNotSame( $token, $other );
+		$this->assertFalse( Lock::refresh( self::KEY, $token, 300 ), 'a different live owner means the lock is genuinely lost' );
 	}
 
 	// =====================================================================

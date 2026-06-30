@@ -156,6 +156,14 @@ final class Preflight {
 			return true;
 		}
 
+		// Some managed hosts (e.g. WordKeeper) DISABLE disk_free_space() via
+		// disable_functions. A disabled function resolves as undefined and FATALS when
+		// called — the @ operator does NOT suppress that. Guard with function_exists
+		// and treat an unmeasurable disk as "room to spare" (same as a false result).
+		if ( ! function_exists( 'disk_free_space' ) ) {
+			return true;
+		}
+
 		$free = @disk_free_space( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors -- false handled below.
 		if ( false === $free ) {
 			// Cannot determine free space — do not block. The mandatory post-copy

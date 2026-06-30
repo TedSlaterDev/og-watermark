@@ -113,14 +113,25 @@ final class Lock {
 
 		if ( self::usesCache() ) {
 			$cached = wp_cache_get( $key, self::GROUP );
-			if ( ! is_string( $cached ) || ! hash_equals( $cached, $token ) ) {
+			// A DIFFERENT, present token is the ONLY genuine "lost lock": another
+			// owner reclaimed the key after our TTL lapsed. A MISSING value is NOT a
+			// lost lock — some persistent object caches evict (or simply fail to
+			// return) what add() stored, mid-request and well within the TTL. Observed
+			// in the wild: that produced spurious heartbeat failures that aborted every
+			// watermark with reason "lock-lost". A worker that truly overran the TTL
+			// would not be calling refresh() at all, so a missing value here means
+			// eviction, not expiry — we self-heal by re-asserting our ownership and
+			// continue. This never overrides a different live owner (rejected above),
+			// and a single apply / a deduped bulk job has no competing writer on the
+			// same id, so the immutable backup remains the real correctness gate.
+			if ( is_string( $cached ) && '' !== $cached && ! hash_equals( $cached, $token ) ) {
 				return false;
 			}
-			// Slide the TTL forward. We are the proven owner, so this re-set is not
-			// a blind overwrite of someone else's lock.
 			return (bool) wp_cache_set( $key, $token, self::GROUP, $ttl );
 		}
 
+		// The options backend stores an explicit expiry, so it keeps strict semantics:
+		// a lapsed or reclaimed lock (readOption() === null) cannot be heartbeated.
 		$stored = self::readOption( $key );
 		if ( null === $stored || ! hash_equals( $stored['token'], $token ) ) {
 			return false;

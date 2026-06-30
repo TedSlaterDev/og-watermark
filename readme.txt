@@ -4,7 +4,7 @@ Tags: watermark, images, media, branding, copyright
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 1.0.0
+Stable tag: 1.1.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -150,6 +150,15 @@ maintenance schedule, set up automatically the first time the site loads.
 
 == Upgrade Notice ==
 
+= 1.1.1 =
+Fixes a "lock lost" error (and partial, aborted watermarking) on hosts with a persistent object cache, where clicking Watermark showed an error even though some thumbnails were created. Recommended for those hosts.
+
+= 1.1.0 =
+Fixes the live settings preview (it now actually shows the rendered sample), automatically clears the cached copy of an image after it is watermarked or restored so caching hosts and CDNs stop serving the stale pre-watermark version, and adds a "Re-detect" button to the Engine status card so a newly enabled Imagick/GD extension is picked up without bumping the plugin. Recommended for everyone.
+
+= 1.0.1 =
+Compatibility fix for hosts that disable disk_free_space() or fsync() (common on managed hosts) — these previously caused a fatal "The request failed" when watermarking. Strongly recommended. Settings and backups are preserved.
+
 = 1.0.0 =
 First stable release. Adds daily backup-integrity checks and leftover-temp
 cleanup, a clear notice when no image engine is available, full translation
@@ -157,6 +166,17 @@ support, and lifecycle hardening (clean deactivation/uninstall). Safe upgrade
 from 0.7.0; your settings and backups are preserved.
 
 == Changelog ==
+
+= 1.1.1 =
+* Fix: on hosts with a persistent object cache that evicts entries early, the per-image lock heartbeat could falsely report "lock lost" mid-run — aborting after the first size and showing an error in the UI even though some thumbnails were already watermarked. The heartbeat now self-heals on eviction (re-asserts ownership when no other worker holds the lock) and fails only when a different live owner has genuinely taken over, so a watermark completes every size cleanly. The options-table lock backend (hosts without a persistent object cache) is unchanged.
+
+= 1.1.0 =
+* Fix: the live settings preview never displayed because the in-memory `data:` image URL was being stripped by URL sanitization. The preview now renders correctly; the plugin-generated data URL is validated against a strict image-data pattern instead of being run through the URL escaper.
+* New: automatic cache purge after a watermark is applied or removed. Because the file path is unchanged, caching plugins and CDNs (SiteGround Optimizer, WP Rocket, LiteSpeed, W3 Total Cache, Cloudflare) otherwise keep serving the stale pre-watermark bytes. The plugin now flushes just that attachment's cached URLs after a successful (re)stamp or restore — targeted, never a site-wide purge — with an `ogwm_auto_purge` filter to disable it and `ogwm_purged_attachment` / `ogwm_purge_urls` actions to wire custom purging.
+* New: a "Re-detect" button on the Engine status card, plus an automatic re-probe when the settings screen loads, so enabling or disabling an image extension (e.g. turning on Imagick) is picked up immediately without a plugin version bump.
+
+= 1.0.1 =
+* Fix: fatal "Call to undefined function" when watermarking on hosts that disable `disk_free_space()` or `fsync()` via `disable_functions` (common on managed hosts such as WordKeeper) — both are now guarded with `function_exists()` and degrade gracefully. The mandatory full-sha1 backup verification still guarantees a correct, complete backup, so durability is preserved.
 
 = 1.0.0 =
 * First stable release.

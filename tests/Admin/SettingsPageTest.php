@@ -197,6 +197,13 @@ final class SettingsPageTest extends TestCase {
 		$this->assertContains( 'ogwm-admin-settings', $scripts );
 		// The localized payload exposes the admin nonce for the preview AJAX.
 		$this->assertSame( 'nonce123', $localized['nonce'] );
+		// And the Feature 3 re-detect wiring: the action name + driver labels the JS
+		// uses to repaint the Engine status card.
+		$this->assertSame( 'ogwm_redetect_engine', $localized['redetectAction'] );
+		$this->assertArrayHasKey( 'imagick', $localized['driverLabels'] );
+		$this->assertArrayHasKey( 'gd', $localized['driverLabels'] );
+		$this->assertArrayHasKey( 'none', $localized['driverLabels'] );
+		$this->assertSame( 'Re-detecting…', $localized['i18n']['redetecting'] );
 	}
 
 	// =====================================================================
@@ -250,6 +257,76 @@ final class SettingsPageTest extends TestCase {
 		foreach ( $positions as $pos ) {
 			$this->assertStringContainsString( 'value="' . $pos . '"', $html, "Missing position cell: $pos" );
 		}
+	}
+
+	public function testRenderEngineCardHasReDetectButtonAndStatusHooks(): void {
+		Functions\when( 'current_user_can' )->justReturn( true );
+		$this->stubManagerStats();
+
+		$html = $this->capture();
+
+		// The Re-detect button + live-update hooks the JS targets are present.
+		$this->assertStringContainsString( 'id="ogwm-redetect"', $html );
+		$this->assertStringContainsString( 'id="ogwm-engine-status"', $html );
+		$this->assertStringContainsString( 'data-ogwm-status="driver"', $html );
+		$this->assertStringContainsString( 'data-ogwm-status="text"', $html );
+		$this->assertStringContainsString( 'Re-detect', $html );
+	}
+
+	public function testRenderReProbesWhenTheCachedReportIsStale(): void {
+		Functions\when( 'current_user_can' )->justReturn( true );
+		$this->stubManagerStats();
+
+		// A pinned report whose probe timestamp is well past the refresh TTL → render()
+		// must re-probe (the Feature 3 "pick up a newly-enabled engine on the settings
+		// screen" behavior). We capture the option write refresh() performs to prove the
+		// re-probe ran, then let it persist a real host report.
+		( new ReflectionClass( Capabilities::class ) )
+			->getProperty( 'cache' )
+			->setValue(
+				null,
+				[
+					'driver'     => 'gd',
+					'imagick'    => false,
+					'gd'         => true,
+					'freetype'   => true,
+					'formats'    => [ 'image/png' => true ],
+					'probed_gmt' => '2000-01-01T00:00:00+00:00', // Ancient → stale.
+				]
+			);
+
+		$wrote = (object) [ 'caps' => null ];
+		Functions\when( 'update_option' )->alias(
+			static function ( $name, $value ) use ( $wrote ): bool {
+				if ( Capabilities::OPTION === $name ) {
+					$wrote->caps = $value;
+				}
+				return true;
+			}
+		);
+
+		$this->capture();
+
+		$this->assertIsArray( $wrote->caps, 'a stale cached probe must trigger a re-probe on the settings screen' );
+		$this->assertArrayHasKey( 'driver', $wrote->caps );
+		$this->assertArrayHasKey( 'probed_gmt', $wrote->caps );
+	}
+
+	public function testRenderDoesNotReProbeWhenTheCachedReportIsFresh(): void {
+		Functions\when( 'current_user_can' )->justReturn( true );
+		$this->stubManagerStats();
+
+		// A freshly-probed pinned report (probed_gmt = now) is within the TTL → render()
+		// must NOT re-probe, so the pinned driver stays authoritative and no option write
+		// happens. This keeps the re-probe scoped/cheap (not every render).
+		$this->setCapabilities( 'gd', true );
+
+		Functions\expect( 'update_option' )->never();
+
+		$html = $this->capture();
+
+		$this->assertStringContainsString( 'Engine status', $html );
+		$this->addToAssertionCount( 1 );
 	}
 
 	public function testRenderBailsForUsersWithoutManageOptions(): void {
@@ -311,6 +388,11 @@ final class SettingsPageTest extends TestCase {
 	/**
 	 * Pin the Capabilities probe to a known driver + FreeType flag by writing the
 	 * private in-request memo through reflection (no real Imagick/GD probe).
+	 *
+	 * The render path now re-probes when the cached report is older than a short TTL
+	 * (the Feature 3 "pick up a newly-enabled engine on the settings screen" change),
+	 * so we stamp probed_gmt to NOW — keeping the pinned driver authoritative for the
+	 * UI-state assertions instead of being overwritten by a real host re-probe.
 	 */
 	private function setCapabilities( string $driver, bool $freetype ): void {
 		( new ReflectionClass( Capabilities::class ) )
@@ -323,7 +405,7 @@ final class SettingsPageTest extends TestCase {
 					'gd'         => 'gd' === $driver,
 					'freetype'   => $freetype,
 					'formats'    => [ 'image/png' => 'none' !== $driver ],
-					'probed_gmt' => '2026-06-29T00:00:00+00:00',
+					'probed_gmt' => gmdate( 'c' ),
 				]
 			);
 	}
