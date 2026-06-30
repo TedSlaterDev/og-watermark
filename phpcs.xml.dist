@@ -1,0 +1,116 @@
+<?xml version="1.0"?>
+<ruleset name="OG Watermark">
+	<description>Coding standards for OG Watermark — the WordPress standard tuned to the
+	OGM house style (PSR-4 namespaces, camelCase methods/vars, short arrays, typed
+	signatures with pragmatic docblocks). Security, correctness, DB, i18n and PHP
+	compatibility sniffs are kept; pure style-philosophy sniffs are excluded.</description>
+
+	<file>.</file>
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/node_modules/*</exclude-pattern>
+	<exclude-pattern>*/assets/*</exclude-pattern>
+	<exclude-pattern>*/bin/*</exclude-pattern><!-- dev-only CLI scripts (e.g. make-pot.php), not shipped -->
+
+	<arg name="extensions" value="php"/>
+	<arg name="basepath" value="."/>
+	<arg value="ps"/>
+	<arg name="parallel" value="8"/>
+
+	<config name="minimum_supported_wp_version" value="6.0"/>
+	<config name="testVersion" value="8.1-"/>
+	<!-- Errors fail the build; warnings are advisory (shown, not fatal). -->
+	<config name="ignore_warnings_on_exit" value="1"/>
+
+	<rule ref="WordPress">
+		<!-- PSR-4 class files use PascalCase names, not WP's hyphenated scheme. -->
+		<exclude name="WordPress.Files.FileName"/>
+
+		<!-- House style: short arrays + camelCase methods/vars/properties (modern,
+		     namespaced, typed). These are deliberate and consistent across the plugin. -->
+		<exclude name="Universal.Arrays.DisallowShortArraySyntax"/>
+		<exclude name="WordPress.NamingConventions.ValidVariableName"/>
+		<exclude name="WordPress.NamingConventions.ValidFunctionName"/>
+		<exclude name="Universal.NamingConventions.NoReservedKeywordParameterNames"/>
+
+		<!-- House style: typed signatures + pragmatic docblocks rather than WP's
+		     mandatory full @param/file/variable comment blocks on every symbol. -->
+		<exclude name="Squiz.Commenting.FunctionComment"/>
+		<exclude name="Squiz.Commenting.FileComment"/>
+		<exclude name="Squiz.Commenting.VariableComment"/>
+		<exclude name="Squiz.Commenting.ClassComment"/>
+		<exclude name="Squiz.Commenting.InlineComment"/>
+		<exclude name="Generic.Commenting.DocComment"/>
+		<!-- Heuristic, false-positives on enum-listing explanatory comments. -->
+		<exclude name="Squiz.PHP.CommentedOutCode"/>
+
+		<!-- Whitespace-alignment preferences that conflict with the house style. -->
+		<exclude name="Generic.Formatting.MultipleStatementAlignment"/>
+		<exclude name="WordPress.Arrays.MultipleStatementAlignment"/>
+		<exclude name="WordPress.Arrays.ArrayDeclarationSpacing"/>
+
+		<!-- Interface/WP-hook callbacks legitimately accept params they don't use. -->
+		<exclude name="Generic.CodeAnalysis.UnusedFunctionParameter"/>
+
+		<!-- Idioms the house style uses deliberately. -->
+		<exclude name="Universal.Operators.DisallowShortTernary"/>
+		<exclude name="WordPress.NamingConventions.ValidHookName"/><!-- slash-namespaced filters: ogwm/default_options -->
+		<exclude name="Universal.ControlStructures.DisallowLonelyIf"/><!-- else+if with a documented branch reads fine -->
+
+		<!-- The backup subsystem does intentional low-level, byte-exact, fsync'd file
+		     I/O (and writes the .htaccess/index.php/web.config deny files); WP_Filesystem
+		     cannot express those guarantees. Integrity is enforced by the plugin's own
+		     atomic-rename + sha1-verify design, not by this sniff. -->
+		<exclude name="WordPress.WP.AlternativeFunctions"/>
+
+		<!-- The GD/Imagick + filesystem ops intentionally suppress library warnings on
+		     bad input and check the return value instead — the @ is deliberate. -->
+		<exclude name="WordPress.PHP.NoSilencedErrors"/>
+
+		<!-- Raising the memory limit is required for compositing large images. -->
+		<exclude name="WordPress.PHP.IniSet.memory_limit_Disallowed"/>
+
+		<!-- Intentional + safe in context: base64 only builds the live-preview data: URL;
+		     serialize() only feeds the internal idempotency hash (never stored user data);
+		     the custom daily cron recurrence is registered via cron_schedules. -->
+		<exclude name="WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode"/>
+		<exclude name="WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_decode"/>
+		<exclude name="WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize"/>
+		<exclude name="WordPress.WP.CronInterval.ChangeDetected"/>
+	</rule>
+
+	<rule ref="WordPress.WP.I18n">
+		<properties>
+			<property name="text_domain" type="array">
+				<element value="og-watermark"/>
+			</property>
+		</properties>
+	</rule>
+
+	<rule ref="PHPCompatibilityWP"/>
+
+	<!-- Test-only patterns: anonymous-class test doubles (whose instance methods use
+	     $this — PHPCompatibility misattributes that to the enclosing static fn), $wpdb
+	     mocks, and co-located helper functions/doubles. Not applicable to runtime code. -->
+	<rule ref="PHPCompatibility.FunctionDeclarations.NewClosure.ThisFoundInStatic">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="WordPress.WP.GlobalVariablesOverride">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="Universal.Files.SeparateFunctionsFromOO">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+	<rule ref="Generic.Files.OneObjectStructurePerFile">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+	<!-- False positive on the REQUIRED `};` terminating an anon-class test double
+	     assigned via an arrow fn — and phpcbf wrongly "fixes" it by deleting that
+	     semicolon, which breaks parsing. Disarm it for tests. -->
+	<rule ref="Generic.CodeAnalysis.EmptyPHPStatement">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+	<!-- Tests seed superglobals/options and use looser input handling. -->
+	<rule ref="WordPress.Security">
+		<exclude-pattern>*/tests/*</exclude-pattern>
+	</rule>
+</ruleset>

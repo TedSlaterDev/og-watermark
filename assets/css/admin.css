@@ -1,0 +1,692 @@
+/* ==========================================================================
+   OG Watermark — admin styles (Orchard Grove Media design system)
+
+   The shared .ogwm-* vocabulary reused by every admin surface: the Settings
+   page, the Bulk Tools page, the media-modal field, and the list-table column.
+   Green #5b8c3e accent, branded header, tabs, white cards, sidebar.
+   ========================================================================== */
+
+/* ---------- Screen wrapper ---------- */
+.ogwm-screen {
+	max-width: 1180px;
+}
+
+/* ---------- Branded header ---------- */
+.ogwm-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 1rem;
+	flex-wrap: wrap;
+	margin: 1rem 0 1rem;
+}
+.ogwm-brand {
+	display: flex;
+	align-items: center;
+	gap: .85rem;
+}
+.ogwm-mark {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 46px;
+	height: 46px;
+	border-radius: 12px;
+	background: #eef4e8;
+	border: 1px solid #d7e6cc;
+	color: #4b7a3f;
+}
+.ogwm-mark .dashicons {
+	font-size: 26px;
+	width: 26px;
+	height: 26px;
+}
+.ogwm-brand-text h1 {
+	margin: 0;
+	padding: 0;
+	font-size: 1.5rem;
+	line-height: 1.2;
+}
+.ogwm-tagline {
+	margin: .15rem 0 0;
+	color: #646970;
+	font-size: .85rem;
+}
+.ogwm-version {
+	font-weight: 600;
+	font-size: .8rem;
+	color: #4b7a3f;
+	background: #eef4e8;
+	border: 1px solid #d7e6cc;
+	border-radius: 999px;
+	padding: .2rem .7rem;
+}
+
+/* ---------- Tabs ---------- */
+.ogwm-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .15rem;
+	margin: 0 0 1.1rem;
+	border-bottom: 1px solid #dcdcde;
+}
+.ogwm-tab {
+	display: inline-flex;
+	align-items: center;
+	gap: .35rem;
+	padding: .6rem .9rem;
+	color: #50575e;
+	text-decoration: none;
+	font-weight: 500;
+	border-bottom: 2px solid transparent;
+	border-radius: 8px 8px 0 0;
+}
+.ogwm-tab .dashicons {
+	font-size: 17px;
+	width: 17px;
+	height: 17px;
+}
+.ogwm-tab:hover {
+	color: #1d2327;
+	background: #f6f7f7;
+}
+.ogwm-tab.is-active {
+	color: #2c4f22;
+	background: #fff;
+	border-bottom-color: #5b8c3e;
+}
+.ogwm-tab:focus {
+	outline: none;
+	box-shadow: 0 0 0 2px rgba(91, 140, 62, .35);
+}
+
+/* ---------- Notices ---------- */
+.ogwm-notice {
+	display: flex;
+	align-items: flex-start;
+	gap: .6rem;
+	margin: 0 0 1.25rem;
+	padding: .85rem 1rem;
+	border: 1px solid #dcdcde;
+	border-left: 4px solid #72aee6;
+	border-radius: 8px;
+	background: #f0f6fc;
+}
+.ogwm-notice p {
+	margin: 0;
+	line-height: 1.5;
+}
+.ogwm-notice .dashicons {
+	flex: 0 0 auto;
+	margin-top: 1px;
+	color: #72aee6;
+}
+.ogwm-notice-warning {
+	border-left-color: #dba617;
+	background: #fcf9e8;
+}
+.ogwm-notice-warning .dashicons {
+	color: #dba617;
+}
+.ogwm-notice-error {
+	border-left-color: #d63638;
+	background: #fcf0f1;
+}
+.ogwm-notice-error .dashicons {
+	color: #d63638;
+}
+
+/* ---------- Layout + cards ---------- */
+.ogwm-layout {
+	display: flex;
+	align-items: flex-start;
+	gap: 1.25rem;
+}
+.ogwm-main {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.ogwm-sidebar {
+	flex: 0 0 300px;
+}
+.ogwm-card {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 12px;
+	padding: 1.25rem 1.5rem;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, .04);
+	margin: 0 0 1.25rem;
+}
+.ogwm-card-title {
+	margin: 0 0 .35rem;
+	font-size: 1.1rem;
+}
+.ogwm-intro {
+	margin: 0 0 .75rem;
+	color: #646970;
+	font-size: .92rem;
+}
+
+@media screen and (max-width: 960px) {
+	.ogwm-layout {
+		flex-direction: column;
+	}
+	.ogwm-sidebar {
+		flex-basis: auto;
+		width: 100%;
+	}
+}
+
+/* ---------- Form table inside a card ---------- */
+.ogwm-fields {
+	margin-top: .25rem;
+}
+.ogwm-fields th {
+	width: 200px;
+	font-weight: 600;
+	padding: 1rem 1rem 1rem 0;
+	vertical-align: top;
+}
+.ogwm-fields td {
+	padding: .9rem 0;
+}
+.ogwm-fields tr {
+	border-top: 1px solid #f0f0f1;
+}
+.ogwm-fields tr:first-child {
+	border-top: none;
+}
+.ogwm-fields input[type="text"],
+.ogwm-fields input[type="number"],
+.ogwm-fields select {
+	border-radius: 6px;
+}
+.ogwm-fields input:focus,
+.ogwm-fields select:focus {
+	border-color: #5b8c3e;
+	box-shadow: 0 0 0 1px #5b8c3e;
+}
+.ogwm-fields .description {
+	color: #646970;
+}
+.ogwm-fields .description code {
+	background: #f6f7f7;
+	border: 1px solid #e2e2e4;
+	border-radius: 4px;
+	padding: 1px 6px;
+}
+
+/* Brand-green primary button, scoped to our screens */
+.ogwm-screen .button-primary {
+	background: #5b8c3e;
+	border-color: #4b7a3f;
+	box-shadow: none;
+	text-shadow: none;
+}
+.ogwm-screen .button-primary:hover,
+.ogwm-screen .button-primary:focus {
+	background: #4b7a3f;
+	border-color: #2c4f22;
+}
+.ogwm-screen .button-primary:focus {
+	box-shadow: 0 0 0 1px #fff, 0 0 0 3px rgba(91, 140, 62, .5);
+}
+.ogwm-screen .button-primary[disabled],
+.ogwm-screen .button-primary:disabled {
+	background: #a7c08f;
+	border-color: #a7c08f;
+}
+.ogwm-submit {
+	margin: 1rem 0 0;
+}
+
+/* ---------- Type switch (logo | text) ---------- */
+.ogwm-typeswitch {
+	display: flex;
+	gap: .6rem;
+	flex-wrap: wrap;
+	margin: 0 0 1rem;
+}
+.ogwm-typeoption {
+	display: inline-flex;
+	align-items: center;
+	gap: .45rem;
+	padding: .55rem .9rem;
+	border: 1px solid #dcdcde;
+	border-radius: 8px;
+	cursor: pointer;
+	font-weight: 500;
+	color: #50575e;
+}
+.ogwm-typeoption:hover {
+	background: #f6f7f7;
+}
+.ogwm-typeoption .dashicons {
+	color: #4b7a3f;
+}
+.ogwm-typeoption:has(input:checked) {
+	border-color: #5b8c3e;
+	background: #eef4e8;
+	color: #2c4f22;
+}
+.ogwm-typeoption.is-disabled {
+	opacity: .5;
+	cursor: not-allowed;
+}
+
+/* Panels toggled by the type switch */
+.ogwm-panel {
+	margin-top: .25rem;
+}
+.ogwm-panel[hidden] {
+	display: none;
+}
+
+.ogwm-inline-radio {
+	display: inline-flex;
+	align-items: center;
+	gap: .3rem;
+	margin-right: 1rem;
+}
+.ogwm-checkbox {
+	display: inline-flex;
+	align-items: center;
+	gap: .4rem;
+}
+
+/* ---------- Logo picker ---------- */
+.ogwm-logo-pick {
+	display: flex;
+	align-items: center;
+	gap: .75rem;
+	flex-wrap: wrap;
+}
+.ogwm-logo-preview {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 80px;
+	max-width: 160px;
+	padding: .4rem;
+	border: 1px solid #dcdcde;
+	border-radius: 8px;
+	background:
+		repeating-conic-gradient(#f0f0f1 0% 25%, #fff 0% 50%) 50% / 16px 16px;
+}
+.ogwm-logo-preview img {
+	max-width: 140px;
+	max-height: 90px;
+	height: auto;
+	display: block;
+}
+.ogwm-logo-clear {
+	color: #b32d2e;
+	text-decoration: none;
+}
+
+/* ---------- Slider + output mirror ---------- */
+.ogwm-slider {
+	display: inline-flex;
+	align-items: center;
+	gap: .6rem;
+}
+.ogwm-range {
+	width: 220px;
+	max-width: 100%;
+	accent-color: #5b8c3e;
+}
+.ogwm-output {
+	min-width: 2.5em;
+	font-weight: 600;
+	color: #1d2327;
+	text-align: right;
+}
+.ogwm-unit {
+	color: #646970;
+}
+
+.ogwm-clamp {
+	display: inline-flex;
+	align-items: center;
+	gap: .35rem;
+	margin-right: 1.25rem;
+	color: #50575e;
+}
+
+/* ---------- 3×3 position grid ---------- */
+.ogwm-posgrid {
+	display: grid;
+	grid-template-columns: repeat(3, 44px);
+	grid-template-rows: repeat(3, 44px);
+	gap: 6px;
+	width: max-content;
+	padding: 8px;
+	border: 1px solid #dcdcde;
+	border-radius: 10px;
+	background: #f6f7f7;
+}
+.ogwm-poscell {
+	position: relative;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid #dcdcde;
+	border-radius: 7px;
+	background: #fff;
+	cursor: pointer;
+}
+.ogwm-poscell input {
+	position: absolute;
+	opacity: 0;
+	width: 100%;
+	height: 100%;
+	margin: 0;
+	cursor: pointer;
+}
+.ogwm-poscell-dot {
+	width: 12px;
+	height: 12px;
+	border-radius: 50%;
+	background: #c3c4c7;
+	transition: background .12s ease, transform .12s ease;
+}
+.ogwm-poscell:hover .ogwm-poscell-dot {
+	background: #8fae72;
+}
+.ogwm-poscell.is-active,
+.ogwm-poscell:has(input:checked) {
+	border-color: #5b8c3e;
+	background: #eef4e8;
+}
+.ogwm-poscell.is-active .ogwm-poscell-dot,
+.ogwm-poscell:has(input:checked) .ogwm-poscell-dot {
+	background: #5b8c3e;
+	transform: scale(1.25);
+}
+.ogwm-poscell input:focus-visible + .ogwm-poscell-dot {
+	box-shadow: 0 0 0 3px rgba(91, 140, 62, .4);
+}
+
+/* ---------- Size checklist ---------- */
+.ogwm-sizes {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: .35rem;
+	max-width: 520px;
+}
+@media screen and (min-width: 520px) {
+	.ogwm-sizes {
+		grid-template-columns: 1fr 1fr;
+	}
+}
+.ogwm-sizebox {
+	display: flex;
+	align-items: center;
+	gap: .45rem;
+	padding: .4rem .55rem;
+	border: 1px solid #f0f0f1;
+	border-radius: 6px;
+}
+.ogwm-sizebox:hover {
+	background: #f6f7f7;
+}
+
+/* ---------- Sidebar ---------- */
+.ogwm-aside h2 {
+	margin: 0 0 .6rem;
+	font-size: 1rem;
+}
+.ogwm-glance {
+	margin: 0;
+	list-style: none;
+	padding: 0;
+}
+.ogwm-glance li {
+	display: flex;
+	align-items: center;
+	gap: .5rem;
+	padding: .45rem 0;
+	border-top: 1px solid #f0f0f1;
+	font-size: .9rem;
+}
+.ogwm-glance li:first-child {
+	border-top: none;
+}
+.ogwm-glance .label {
+	color: #646970;
+}
+.ogwm-glance .value {
+	margin-left: auto;
+	font-weight: 600;
+	color: #1d2327;
+}
+.ogwm-dot {
+	flex: 0 0 auto;
+	width: 10px;
+	height: 10px;
+	border-radius: 50%;
+	background: #c3c4c7;
+}
+.ogwm-dot.is-on {
+	background: #5b8c3e;
+}
+.ogwm-aside-foot {
+	margin: 1rem 0 0;
+	color: #8c8f94;
+	font-size: .8rem;
+	line-height: 1.6;
+}
+
+/* ---------- Live preview ---------- */
+.ogwm-preview {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 150px;
+	padding: .5rem;
+	border: 1px solid #dcdcde;
+	border-radius: 10px;
+	background:
+		repeating-conic-gradient(#f0f0f1 0% 25%, #fff 0% 50%) 50% / 18px 18px;
+	text-align: center;
+}
+.ogwm-preview img {
+	max-width: 100%;
+	height: auto;
+	border-radius: 6px;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, .18);
+}
+.ogwm-preview-placeholder {
+	color: #8c8f94;
+	font-size: .88rem;
+}
+.ogwm-preview.is-loading {
+	opacity: .55;
+}
+
+/* ---------- Badges (shared with the media column/field) ---------- */
+.ogwm-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: .3rem;
+	min-width: 22px;
+	padding: 2px 9px;
+	border-radius: 999px;
+	font-weight: 600;
+	font-size: 12px;
+	line-height: 18px;
+	text-align: center;
+	background: #f0f0f1;
+	color: #50575e;
+	border: 1px solid #dcdcde;
+}
+.ogwm-badge-watermarked {
+	background: #e7f7ed;
+	color: #146c2e;
+	border-color: #b7e3c6;
+}
+.ogwm-badge-queued {
+	background: #f0f6fc;
+	color: #2161a4;
+	border-color: #cfe2f3;
+}
+.ogwm-badge-stale {
+	background: #fcf9e8;
+	color: #8a6d12;
+	border-color: #f0e6a6;
+}
+.ogwm-badge-error {
+	background: #fde8e8;
+	color: #b32d2e;
+	border-color: #f5b5b5;
+}
+.ogwm-badge-skipped {
+	background: #f0f0f1;
+	color: #646970;
+	border-color: #dcdcde;
+}
+
+/* ---------- Progress bar (Bulk Tools) ---------- */
+.ogwm-progress {
+	height: 14px;
+	margin: .75rem 0 .35rem;
+	background: #eef4e8;
+	border-radius: 999px;
+	overflow: hidden;
+}
+.ogwm-progress-bar {
+	display: block;
+	height: 100%;
+	width: 0;
+	background: #5b8c3e;
+	transition: width .25s ease;
+}
+.ogwm-progress-meta {
+	display: flex;
+	justify-content: space-between;
+	color: #646970;
+	font-size: .85rem;
+}
+.ogwm-progress-meta .ogwm-progress-failed {
+	color: #b32d2e;
+	font-weight: 600;
+}
+
+/* ---------- Bulk scope options ---------- */
+.ogwm-scope {
+	display: grid;
+	gap: .6rem;
+	margin: 0 0 1rem;
+	max-width: 560px;
+}
+.ogwm-scope-option {
+	display: flex;
+	align-items: flex-start;
+	gap: .55rem;
+	padding: .7rem .85rem;
+	border: 1px solid #dcdcde;
+	border-radius: 8px;
+}
+.ogwm-scope-option:has(input:checked) {
+	border-color: #5b8c3e;
+	background: #eef4e8;
+}
+.ogwm-scope-option .ogwm-scope-label {
+	font-weight: 600;
+	color: #1d2327;
+}
+.ogwm-scope-option .description {
+	margin: .15rem 0 0;
+}
+
+.ogwm-preflight {
+	margin: .5rem 0 1rem;
+	padding: .7rem .9rem;
+	font-size: .9rem;
+	color: #5b4d10;
+	background: #fcf9e8;
+	border: 1px solid #f0e6a6;
+	border-left: 4px solid #dba617;
+	border-radius: 6px;
+}
+
+/* ---------- Media-library field (attachment modal + edit screen) ---------- */
+.ogwm-media-field {
+	margin: .35rem 0 0;
+}
+.ogwm-media-field .ogwm-badge {
+	margin-left: .35rem;
+}
+.ogwm-media-actions {
+	margin-top: .5rem;
+}
+.ogwm-media-actions .button {
+	margin-right: .3rem;
+}
+.ogwm-media-spinner {
+	display: none;
+	vertical-align: middle;
+	float: none;
+	margin: 0 0 0 .25rem;
+}
+.ogwm-media-spinner.is-active {
+	display: inline-block;
+}
+
+/* ---------- Media list-table column ---------- */
+.column-ogwm_watermark {
+	width: 12%;
+}
+.ogwm-col-action {
+	display: inline-block;
+	margin-top: .25rem;
+}
+
+/* ---------- Bulk Tools page extras ---------- */
+.ogwm-legend {
+	font-weight: 600;
+	font-size: 1rem;
+	margin: 0 0 .6rem;
+	padding: 0;
+}
+.ogwm-actions {
+	display: flex;
+	align-items: center;
+	gap: .5rem;
+	margin: 1rem 0 .25rem;
+}
+.ogwm-spinner {
+	float: none;
+	margin: 0;
+	visibility: hidden;
+}
+.ogwm-spinner.is-active {
+	visibility: visible;
+}
+.ogwm-progress-wrap {
+	margin-top: .75rem;
+}
+.ogwm-stats {
+	margin: 0 0 .75rem;
+	padding: 0;
+	list-style: none;
+}
+.ogwm-stats li {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: .5rem;
+	padding: .45rem 0;
+	border-top: 1px solid #f0f0f1;
+}
+.ogwm-stats li:first-child {
+	border-top: none;
+}
+.ogwm-stat-label {
+	color: #646970;
+	font-size: .9rem;
+}
+.ogwm-stat-value {
+	font-weight: 700;
+	color: #2c4f22;
+}

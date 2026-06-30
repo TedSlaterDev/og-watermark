@@ -1,0 +1,18 @@
+# Files & folders kept OUT of the distributed plugin ZIP (dev-only / not needed at runtime).
+# Used by .github/workflows/release.yml. Patterns are rsync excludes (match by name at any level).
+.git
+.github
+.gitignore
+.distignore
+.DS_Store
+*.log
+build
+bin
+tests
+vendor
+node_modules
+composer.json
+composer.lock
+*.dist
+SPEC.md
+ROADMAP.md

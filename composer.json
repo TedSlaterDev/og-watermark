@@ -1,0 +1,47 @@
+{
+	"name": "orchard-grove-media/og-watermark",
+	"description": "Pixel-bakes permanent watermarks (logo or text) into WordPress image files using Imagick or GD.",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"authors": [
+		{
+			"name": "Orchard Grove Media, LLC",
+			"homepage": "https://orchardgrove.com/"
+		}
+	],
+	"require": {
+		"php": ">=8.1"
+	},
+	"suggest": {
+		"ext-imagick": "Preferred image driver — more formats and FreeType text rendering.",
+		"ext-gd": "Fallback image driver when Imagick is unavailable."
+	},
+	"require-dev": {
+		"squizlabs/php_codesniffer": "^3.9",
+		"wp-coding-standards/wpcs": "^3.1",
+		"phpcompatibility/phpcompatibility-wp": "^2.1",
+		"dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+		"phpunit/phpunit": "^10.5",
+		"brain/monkey": "^2.6"
+	},
+	"autoload": {
+		"psr-4": {
+			"OrchardGrove\\OgWatermark\\": "src/"
+		}
+	},
+	"autoload-dev": {
+		"psr-4": {
+			"OrchardGrove\\OgWatermark\\Tests\\": "tests/"
+		}
+	},
+	"config": {
+		"allow-plugins": {
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		}
+	},
+	"scripts": {
+		"lint": "phpcs",
+		"fix": "phpcbf",
+		"test": "phpunit"
+	}
+}
