@@ -129,7 +129,7 @@ final class SettingsPageTest extends TestCase {
 		$this->assertSame( [ Sanitizer::class, 'sanitize' ], $captured[2]['sanitize_callback'] );
 	}
 
-	public function testAddMenuRegistersTopLevelAndBothSubmenus(): void {
+	public function testAddMenuRegistersTopLevelAndTheSettingsSubmenuOnly(): void {
 		$menu     = null;
 		$submenus = [];
 		Functions\when( 'add_menu_page' )->alias(
@@ -149,12 +149,11 @@ final class SettingsPageTest extends TestCase {
 		$this->assertSame( SettingsPage::PAGE, $menu[1] );
 		$this->assertSame( 'dashicons-format-image', $menu[2] );
 
-		// Settings submenu (shares the parent slug).
+		// Only the Settings submenu (shares the parent slug). The former Bulk Tools
+		// submenu is gone — it is now the "Apply" tab on this same page.
 		$this->assertArrayHasKey( SettingsPage::PAGE, $submenus );
 		$this->assertSame( 'manage_options', $submenus[ SettingsPage::PAGE ][1] );
-		// Bulk Tools submenu under the same parent.
-		$this->assertArrayHasKey( SettingsPage::BULK_PAGE, $submenus );
-		$this->assertSame( SettingsPage::PAGE, $submenus[ SettingsPage::BULK_PAGE ][0] );
+		$this->assertArrayNotHasKey( SettingsPage::BULK_PAGE, $submenus, 'the Bulk Tools submenu must no longer be registered' );
 	}
 
 	// =====================================================================

@@ -695,3 +695,22 @@
 	font-weight: 700;
 	color: #2c4f22;
 }
+
+/* ---------- Watermark control injected into the media-modal details sidebar ---------- */
+.ogwm-media-detail {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: .35rem;
+	margin-top: .75rem;
+	padding-top: .6rem;
+	border-top: 1px solid #dcdcde;
+}
+.ogwm-media-detail .ogwm-field-label {
+	width: 100%;
+	font-weight: 600;
+	color: #50575e;
+}
+.ogwm-media-detail .ogwm-field-badge:empty {
+	display: none;
+}

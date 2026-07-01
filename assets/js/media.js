@@ -55,8 +55,9 @@
 
 	/**
 	 * The container for an attachment's controls — either an `.ogwm-col` cell (list
-	 * column) or an `.ogwm-field` block (media modal / edit screen). We swap the
-	 * badge inside whichever one holds the clicked button.
+	 * column) or an `.ogwm-field` block (the attachment-details field, the classic
+	 * edit screen, and the media-modal control injected by media-frame.js). We swap
+	 * the badge inside whichever one holds the clicked button.
 	 */
 	function containerFor( button ) {
 		return button.closest( '.ogwm-col, .ogwm-field' );

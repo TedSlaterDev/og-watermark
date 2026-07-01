@@ -4,7 +4,7 @@ Tags: watermark, images, media, branding, copyright
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 1.2.4
+Stable tag: 1.2.6
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -150,6 +150,12 @@ maintenance schedule, set up automatically the first time the site loads.
 
 == Upgrade Notice ==
 
+= 1.2.6 =
+Adds Watermark / Remove buttons to the "Attachment details" of the media pop-up — including the panel you get when setting or changing a post's featured image, where WordPress does not otherwise show the plugin's controls.
+
+= 1.2.5 =
+Housekeeping: the "Bulk Tools" screen is now an "Apply" tab on the OG Watermark settings page instead of a separate menu item. Old bookmarks and the media-library "Watermark all flagged" action redirect to the new tab automatically.
+
 = 1.2.4 =
 More large-site hardening: the queue's duplicate-guard is now per-image (so a busy site can't strand an image as permanently "pending"), a mass thumbnail regenerate no longer floods the queue (it is paced by a self-draining catch-up), and the "Every image in the library" bulk option has been removed. Recommended for large/high-concurrency sites.
 
@@ -184,6 +190,12 @@ support, and lifecycle hardening (clean deactivation/uninstall). Safe upgrade
 from 0.7.0; your settings and backups are preserved.
 
 == Changelog ==
+
+= 1.2.6 =
+* New: **Watermark** and **Remove** buttons in the media pop-up's "Attachment details" sidebar — most usefully the panel that opens when you **set or change a post's featured image**, where WordPress does not render the plugin's attachment field, so the controls were previously missing there. The buttons use the same secured per-image AJAX (capability + nonce) as the media-library controls, and are added by extending the media views (guarded so they never duplicate the control WordPress already shows in the media-library modal, and only for image attachments). Works in both the classic and block editors' featured-image pickers.
+
+= 1.2.5 =
+* Change: the "Bulk Tools" submenu is now an **"Apply" tab** on the OG Watermark settings screen, so watermark configuration and applying live on one page. The separate Bulk Tools menu item is removed; a bookmark to the old page (and the media-library "Watermark all flagged" bulk action) redirects to the new tab automatically. No change to how bulk runs work — they are still server-side/background and resumable.
 
 = 1.2.4 =
 * Fix (concurrency): the background-queue duplicate guard moved from a single shared `ogwm_pending` option to a per-attachment `_ogwm_pending` marker. Under concurrent workers the shared option could lose a write (last-writer-wins) and strand an image as permanently "pending", so it would silently never get (re)watermarked. Per-image markers cannot collide. The old option is cleaned up on upgrade. The enqueue path also now rolls the marker back if the underlying scheduler refuses the job (e.g. a cron-replacement plugin or Action Scheduler under load), closing a second way an image could get stuck "pending".

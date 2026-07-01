@@ -88,6 +88,18 @@ final class MediaColumn {
 		wp_enqueue_style( 'ogwm-admin', OGWM_URL . 'assets/css/admin.css', [], OGWM_VERSION );
 		wp_enqueue_script( self::SCRIPT_HANDLE, OGWM_URL . 'assets/js/media.js', [], OGWM_VERSION, true );
 
+		// media-frame.js injects the Watermark control into the media modal's
+		// attachment-details sidebar (notably the featured-image frame, where WordPress
+		// does not render our compat field). It depends on wp.media (media-views) and on
+		// media.js, which localizes ogwmMedia (its nonce + labels) and handles the clicks.
+		wp_enqueue_script(
+			self::SCRIPT_HANDLE . '-frame',
+			OGWM_URL . 'assets/js/media-frame.js',
+			[ 'media-views', self::SCRIPT_HANDLE ],
+			OGWM_VERSION,
+			true
+		);
+
 		wp_localize_script(
 			self::SCRIPT_HANDLE,
 			'ogwmMedia',
@@ -95,9 +107,12 @@ final class MediaColumn {
 				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
 				'nonce'   => wp_create_nonce( Ajax::NONCE_ACTION ),
 				'i18n'    => [
-					'applying' => __( 'Applying…', 'og-watermark' ),
-					'removing' => __( 'Removing…', 'og-watermark' ),
-					'error'    => __( 'The request failed. Please try again.', 'og-watermark' ),
+					'applying'  => __( 'Applying…', 'og-watermark' ),
+					'removing'  => __( 'Removing…', 'og-watermark' ),
+					'error'     => __( 'The request failed. Please try again.', 'og-watermark' ),
+					'title'     => __( 'OG Watermark', 'og-watermark' ),
+					'watermark' => __( 'Watermark', 'og-watermark' ),
+					'remove'    => __( 'Remove', 'og-watermark' ),
 				],
 			]
 		);
@@ -388,13 +403,14 @@ final class MediaColumn {
 	}
 
 	/**
-	 * Build the redirect to the Bulk Tools page, carrying a confirmation count so
-	 * the page can render an admin notice. On an APPLY the queue was already seeded
-	 * server-side, so we also set ogwm_resume=1 — BulkPage emits window.ogwmAutoStart
-	 * from it and bulk.js begins polling the running job immediately (no manual reload).
+	 * Build the redirect to the Apply tab of the settings screen, carrying a
+	 * confirmation count so the panel can render an admin notice. On an APPLY the
+	 * queue was already seeded server-side, so we also set ogwm_resume=1 — the panel
+	 * emits window.ogwmAutoStart from it and bulk.js begins polling the running job
+	 * immediately (no manual reload).
 	 */
 	private static function bulkRedirect( int $count, string $kind ): string {
-		$base = admin_url( 'admin.php?page=ogwm-bulk' );
+		$base = admin_url( 'admin.php?page=ogwm&tab=apply' );
 		$args = [
 			self::NOTICE_ARG  => $count,
 			self::ACTION_ARG  => $kind,

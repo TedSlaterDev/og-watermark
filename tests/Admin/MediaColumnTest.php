@@ -123,8 +123,9 @@ final class MediaColumnTest extends TestCase {
 		// 3) NOTHING was composited in the request — the Processor was never called.
 		$this->assertSame( [], $this->processed, 'the bulk handler must NEVER stamp an image inline' );
 
-		// 4) Redirect lands on the Bulk Tools page with the confirmation count.
-		$this->assertStringContainsString( 'page=ogwm-bulk', $redirect );
+		// 4) Redirect lands on the Apply tab of the settings screen with the count.
+		$this->assertStringContainsString( 'page=ogwm', $redirect );
+		$this->assertStringContainsString( 'tab=apply', $redirect );
 		$this->assertStringContainsString( MediaColumn::NOTICE_ARG . '=3', $redirect );
 	}
 
@@ -159,7 +160,8 @@ final class MediaColumnTest extends TestCase {
 		$this->assertArrayNotHasKey( Meta::ENABLED, $this->meta[9] ?? [] );
 		$this->assertArrayNotHasKey( 'ogwm_bulk_state', $this->options );
 		$this->assertSame( [], $this->processed );
-		$this->assertStringContainsString( 'page=ogwm-bulk', $redirect );
+		$this->assertStringContainsString( 'page=ogwm', $redirect );
+		$this->assertStringContainsString( 'tab=apply', $redirect );
 	}
 
 	public function testBulkHandlerPassesThroughForeignAction(): void {
@@ -332,10 +334,16 @@ final class MediaColumnTest extends TestCase {
 		// The per-image script is enqueued and localized as window.ogwmMedia with the
 		// ajaxUrl + the ogwm_admin nonce (so check_ajax_referer passes) + i18n.
 		$this->assertContains( 'ogwm-media', $scripts );
+		// The media-frame extension (injects the control into the media-modal details,
+		// incl. the featured-image frame) is enqueued too.
+		$this->assertContains( 'ogwm-media-frame', $scripts );
 		$this->assertSame( 'ogwmMedia', $localized['obj'] );
 		$this->assertArrayHasKey( 'ajaxUrl', $localized['data'] );
 		$this->assertSame( 'nonce123', $localized['data']['nonce'] );
 		$this->assertArrayHasKey( 'i18n', $localized['data'] );
+		// The injected buttons' labels are localized for media-frame.js to use.
+		$this->assertArrayHasKey( 'watermark', $localized['data']['i18n'] );
+		$this->assertArrayHasKey( 'remove', $localized['data']['i18n'] );
 	}
 
 	public function testAssetsDoNotEnqueueMediaJsOnUnrelatedScreen(): void {

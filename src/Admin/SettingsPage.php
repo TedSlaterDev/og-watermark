@@ -40,7 +40,8 @@ final class SettingsPage {
 	/** Top-level menu/page slug. */
 	public const PAGE = 'ogwm';
 
-	/** Bulk Tools submenu slug (its render lives in {@see BulkPage}). */
+	/** Legacy Bulk Tools slug — the submenu was folded into the "Apply" tab; kept only
+	 * so a bookmark to the old page redirects to the tab. */
 	public const BULK_PAGE = 'ogwm-bulk';
 
 	/** Stylesheet/script handle base. */
@@ -59,7 +60,31 @@ final class SettingsPage {
 		$page = new self();
 		add_action( 'admin_menu', [ $page, 'addMenu' ] );
 		add_action( 'admin_init', [ $page, 'registerSetting' ] );
+		add_action( 'admin_init', [ self::class, 'redirectLegacyBulkPage' ] );
 		add_action( 'admin_enqueue_scripts', [ $page, 'assets' ] );
+	}
+
+	/**
+	 * Back-compat: the Bulk Tools submenu became the "Apply" tab on this screen. A
+	 * bookmark to the old ?page=ogwm-bulk URL (a page that no longer exists) is
+	 * redirected to ?page=ogwm&tab=apply, carrying any query args (the media-library
+	 * bulk-action redirect already targets the new URL directly).
+	 */
+	public static function redirectLegacyBulkPage(): void {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only page selector; no state mutation, we only redirect.
+		if ( ! isset( $_GET['page'] ) || self::BULK_PAGE !== sanitize_key( (string) wp_unslash( $_GET['page'] ) ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		$args         = array_map( 'sanitize_text_field', wp_unslash( $_GET ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$args['page'] = self::PAGE;
+		$args['tab']  = 'apply';
+
+		wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php' ) ) );
+		exit;
 	}
 
 	/**
@@ -88,16 +113,8 @@ final class SettingsPage {
 			[ $this, 'render' ]
 		);
 
-		if ( class_exists( BulkPage::class ) ) {
-			add_submenu_page(
-				self::PAGE,
-				__( 'OG Watermark Bulk Tools', 'og-watermark' ),
-				__( 'Bulk Tools', 'og-watermark' ),
-				'manage_options',
-				self::BULK_PAGE,
-				[ BulkPage::class, 'render' ]
-			);
-		}
+		// The former "Bulk Tools" submenu is now an "Apply" TAB on this same page
+		// (admin.php?page=ogwm&tab=apply), rendered by render() → BulkPage::renderPanel().
 	}
 
 	/** Register the single option with the PRODUCTION sanitize callback. */
@@ -189,16 +206,9 @@ final class SettingsPage {
 		}
 	}
 
-	/** Whether $hook is one of our plugin's own admin screens. */
+	/** Whether $hook is the plugin's settings screen (which now also hosts the Apply tab). */
 	private function isSettingsScreen( string $hook ): bool {
-		return in_array(
-			$hook,
-			[
-				'toplevel_page_' . self::PAGE,
-				self::PAGE . '_page_' . self::BULK_PAGE,
-			],
-			true
-		);
+		return 'toplevel_page_' . self::PAGE === $hook;
 	}
 
 	/**
@@ -222,6 +232,11 @@ final class SettingsPage {
 		$usable  = Capabilities::isUsable();
 		$text    = Capabilities::hasFreeType();
 		$type    = $options->str( 'watermark.type', 'text' );
+
+		// Which tab is active. 'apply' shows the bulk panel (formerly the Bulk Tools
+		// page); anything else is the settings form. Read-only navigation hint.
+		$tab     = isset( $_GET['tab'] ) ? sanitize_key( (string) wp_unslash( $_GET['tab'] ) ) : 'settings'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only tab selector; no state mutation.
+		$isApply = 'apply' === $tab;
 		?>
 		<div class="wrap ogwm-screen">
 			<div class="ogwm-header">
@@ -237,11 +252,11 @@ final class SettingsPage {
 			<hr class="wp-header-end" />
 
 			<nav class="ogwm-tabs" aria-label="<?php esc_attr_e( 'OG Watermark', 'og-watermark' ); ?>">
-				<a href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::PAGE ) ); ?>" class="ogwm-tab is-active" aria-current="page">
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::PAGE ) ); ?>" class="ogwm-tab<?php echo $isApply ? '' : ' is-active'; ?>"<?php echo $isApply ? '' : ' aria-current="page"'; ?>>
 					<span class="dashicons dashicons-admin-settings" aria-hidden="true"></span><?php esc_html_e( 'Settings', 'og-watermark' ); ?>
 				</a>
-				<a href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::BULK_PAGE ) ); ?>" class="ogwm-tab">
-					<span class="dashicons dashicons-images-alt2" aria-hidden="true"></span><?php esc_html_e( 'Bulk Tools', 'og-watermark' ); ?>
+				<a href="<?php echo esc_url( admin_url( 'admin.php?page=' . self::PAGE . '&tab=apply' ) ); ?>" class="ogwm-tab<?php echo $isApply ? ' is-active' : ''; ?>"<?php echo $isApply ? ' aria-current="page"' : ''; ?>>
+					<span class="dashicons dashicons-images-alt2" aria-hidden="true"></span><?php esc_html_e( 'Apply', 'og-watermark' ); ?>
 				</a>
 			</nav>
 
@@ -260,33 +275,37 @@ final class SettingsPage {
 				</div>
 			<?php endif; ?>
 
-			<div class="ogwm-layout">
-				<div class="ogwm-main">
-					<form method="post" action="options.php" class="ogwm-form" id="ogwm-settings-form">
-						<?php settings_fields( self::GROUP ); ?>
+			<?php if ( $isApply ) : ?>
+				<?php BulkPage::renderPanel( $usable ); ?>
+			<?php else : ?>
+				<div class="ogwm-layout">
+					<div class="ogwm-main">
+						<form method="post" action="options.php" class="ogwm-form" id="ogwm-settings-form">
+							<?php settings_fields( self::GROUP ); ?>
 
-						<?php $this->cardType( $options, $type, $text ); ?>
-						<?php $this->cardPlacement( $options ); ?>
-						<?php $this->cardSizing( $options ); ?>
-						<?php $this->cardSizes( $options ); ?>
-						<?php $this->cardOutput( $options ); ?>
-						<?php $this->cardAdvanced( $options ); ?>
+							<?php $this->cardType( $options, $type, $text ); ?>
+							<?php $this->cardPlacement( $options ); ?>
+							<?php $this->cardSizing( $options ); ?>
+							<?php $this->cardSizes( $options ); ?>
+							<?php $this->cardOutput( $options ); ?>
+							<?php $this->cardAdvanced( $options ); ?>
 
-						<p class="ogwm-submit">
-							<?php
-							$submit_attrs = $usable ? [] : [ 'disabled' => 'disabled' ];
-							submit_button( __( 'Save settings', 'og-watermark' ), 'primary', 'submit', false, $submit_attrs );
-							?>
-						</p>
-					</form>
+							<p class="ogwm-submit">
+								<?php
+								$submit_attrs = $usable ? [] : [ 'disabled' => 'disabled' ];
+								submit_button( __( 'Save settings', 'og-watermark' ), 'primary', 'submit', false, $submit_attrs );
+								?>
+							</p>
+						</form>
+					</div>
+
+					<aside class="ogwm-sidebar">
+						<?php $this->cardPreview( $usable ); ?>
+						<?php $this->cardStorage(); ?>
+						<?php $this->cardStatus( $caps ); ?>
+					</aside>
 				</div>
-
-				<aside class="ogwm-sidebar">
-					<?php $this->cardPreview( $usable ); ?>
-					<?php $this->cardStorage(); ?>
-					<?php $this->cardStatus( $caps ); ?>
-				</aside>
-			</div>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
