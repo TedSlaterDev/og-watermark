@@ -20,7 +20,7 @@ final class MetaTest extends TestCase {
 		}
 	}
 
-	public function testKeysContainTheCanonicalNine(): void {
+	public function testKeysContainTheCanonicalSet(): void {
 		$expected = [
 			'_ogwm_enabled',
 			'_ogwm_status',
@@ -31,6 +31,8 @@ final class MetaTest extends TestCase {
 			'_ogwm_sizes_done',
 			'_ogwm_applied_gmt',
 			'_ogwm_last_error',
+			'_ogwm_pending',
+			'_ogwm_reprocess',
 		];
 
 		// Order-independent set comparison.
@@ -56,6 +58,7 @@ final class MetaTest extends TestCase {
 			'skipped_offloaded',
 			'backup_missing',
 			'too_large',
+			'too_small',
 		];
 
 		sort( $expected );

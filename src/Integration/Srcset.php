@@ -31,9 +31,19 @@ use OrchardGrove\OgWatermark\Support\Meta;
  */
 final class Srcset {
 
-	/** Register the srcset filter at the documented default priority. */
+	/**
+	 * Register the srcset filter — but ONLY when the opt-in
+	 * `output.srcset_hide_unstamped` toggle is on. The default is off, so a normal
+	 * install adds NO front-end hook at all: `wp_calculate_image_srcset` fires for
+	 * every responsive image on every page, and at 3M+ pageviews we must not attach
+	 * to (and rebuild Options in) that hot path unless the feature is actually in
+	 * use. register() runs once per request at boot, so toggling the setting takes
+	 * effect on the next request; the filter keeps its own fast-exit as defense.
+	 */
 	public static function register(): void {
-		add_filter( 'wp_calculate_image_srcset', [ self::class, 'filter' ], 10, 5 );
+		if ( ( new Options() )->bool( 'output.srcset_hide_unstamped' ) ) {
+			add_filter( 'wp_calculate_image_srcset', [ self::class, 'filter' ], 10, 5 );
+		}
 	}
 
 	/**

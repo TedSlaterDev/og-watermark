@@ -88,13 +88,29 @@ final class CompositorTest extends TestCase {
 		$driver = $this->stubDriver();
 		Compositor::setTestDriver( $driver );
 
-		// 100px shorter edge < min_dimension_px (300) → Geometry returns null.
+		// 100px shorter edge < min_dimension_px (300) → Geometry returns null. As a
+		// NON-primary (thumbnail) target the outcome is the benign 'too_small', not a
+		// hard failure/skip, and nothing is painted.
 		$src  = $this->makePng( 120, 100 );
 		$logo = $this->makePng( 60, 30 );
 		$out  = Compositor::stamp( $src, $this->dest(), 'image/png', $this->logoSettings(), $logo );
 
-		$this->assertSame( Result::SKIPPED, $out->status );
+		$this->assertSame( Result::TOO_SMALL, $out->status );
 		$this->assertFalse( $driver->painted, 'no paint should occur when Geometry skips the size' );
+	}
+
+	public function testPrimaryTargetBypassesTheMinDimensionSkip(): void {
+		$driver = $this->stubDriver();
+		Compositor::setTestDriver( $driver );
+
+		// The SAME sub-min_dimension image, but flagged as the primary (full) target,
+		// must be marked anyway — min_dimension only gates generated thumbnail sizes.
+		$src  = $this->makePng( 120, 100 );
+		$logo = $this->makePng( 60, 30 );
+		$out  = Compositor::stamp( $src, $this->dest(), 'image/png', $this->logoSettings(), $logo, true );
+
+		$this->assertSame( Result::STAMPED, $out->status );
+		$this->assertTrue( $driver->painted, 'the primary image is marked despite being below min_dimension' );
 	}
 
 	// --- happy path: logo -------------------------------------------------
@@ -172,6 +188,73 @@ final class CompositorTest extends TestCase {
 		$this->assertStringContainsString( '2026', $driver->textSpec->text );
 		$this->assertStringContainsString( 'Test Site', $driver->textSpec->text );
 		$this->assertSame( $this->fontPath(), $driver->textSpec->fontPath );
+	}
+
+	public function testLongTextShrinksToFitInsteadOfSkipping(): void {
+		$driver = $this->stubDriver();
+		Compositor::setTestDriver( $driver );
+
+		// A long string at a large scale measures far wider than 90% of the image;
+		// before shrink-to-fit this hard-skipped. It must now shrink and STAMP.
+		$s                                = $this->textSettings();
+		$s['watermark']['text']           = 'This image was created by AI for testing purposes.';
+		$s['watermark']['text_scale_pct'] = 12;
+
+		$src = $this->makePng( 1200, 800 );
+		$out = Compositor::stamp( $src, $this->dest(), 'image/png', $s, null );
+
+		$this->assertSame( Result::STAMPED, $out->status, 'long text should shrink to fit, not fail' );
+		$this->assertTrue( $driver->paintedText );
+	}
+
+	public function testTextTooTallForASliverImageIsTooSmall(): void {
+		$driver = $this->stubDriver();
+		Compositor::setTestDriver( $driver );
+
+		// An 8px-tall sliver cannot carry legible text even at the MIN_PT floor →
+		// benign 'too_small', even as the primary target (min_dimension is bypassed,
+		// but the fit gate is not), and nothing is painted.
+		$src = $this->makePng( 400, 8 );
+		$out = Compositor::stamp( $src, $this->dest(), 'image/png', $this->textSettings(), null, true );
+
+		$this->assertSame( Result::TOO_SMALL, $out->status );
+		$this->assertFalse( $driver->paintedText );
+	}
+
+	public function testLongTextOnNarrowImageThatCannotFitAtMinPtIsTooSmall(): void {
+		$driver = $this->stubDriver();
+		Compositor::setTestDriver( $driver );
+
+		// Narrow image: pointSize() already clamps to MIN_PT, so fitText cannot shrink
+		// further; a long string still overflows the 90%-width budget → benign
+		// too_small (even as primary, where min_dimension is bypassed — the FIT gate
+		// still applies), and nothing is painted.
+		$s              = $this->textSettings();
+		$s['watermark']['text'] = 'A very long watermark disclaimer that cannot possibly fit here.';
+
+		$src = $this->makePng( 150, 400 );
+		$out = Compositor::stamp( $src, $this->dest(), 'image/png', $s, null, true );
+
+		$this->assertSame( Result::TOO_SMALL, $out->status );
+		$this->assertFalse( $driver->paintedText );
+	}
+
+	public function testLogoWiderThanNinetyPercentIsSkippedNotTooSmall(): void {
+		$driver = $this->stubDriver();
+		Compositor::setTestDriver( $driver );
+
+		// A logo scaled beyond 90% of the image width is "too big to be a watermark" —
+		// an actionable skip (lower the scale), NOT the benign 'too small'.
+		$s                        = $this->logoSettings();
+		$s['sizing']['scale_pct'] = 100;
+
+		$src  = $this->makePng( 600, 600 );
+		$logo = $this->makePng( 300, 150 );
+		$out  = Compositor::stamp( $src, $this->dest(), 'image/png', $s, $logo, true );
+
+		$this->assertSame( Result::SKIPPED, $out->status );
+		$this->assertStringContainsString( 'too large', $out->reason );
+		$this->assertFalse( $driver->paintedLogo );
 	}
 
 	public function testTextModeWithoutFreeTypeIsSkipped(): void {

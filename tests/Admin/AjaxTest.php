@@ -559,7 +559,7 @@ final class AjaxTest extends TestCase {
 		// One of the fixed render tokens the safeStatus() vocabulary can produce.
 		$this->assertContains(
 			$reason,
-			[ 'render-skipped', 'render-too_large', 'render-failed', 'render-stamped', 'render-readback-failed' ],
+			[ 'render-skipped', 'render-too_large', 'render-too_small', 'render-failed', 'render-stamped', 'render-readback-failed' ],
 			'the render-failure reason must be a fixed, path-free token'
 		);
 	}

@@ -5,6 +5,7 @@ namespace OrchardGrove\OgWatermark\Admin;
 
 defined( 'ABSPATH' ) || exit;
 
+use OrchardGrove\OgWatermark\Backup\Storage;
 use OrchardGrove\OgWatermark\Pipeline\Outcome;
 use OrchardGrove\OgWatermark\Pipeline\Processor;
 use OrchardGrove\OgWatermark\Queue\BulkRunner;
@@ -69,6 +70,12 @@ final class Ajax {
 	/** Minimum seconds between two preview renders for a single user (server-side throttle). */
 	private const PREVIEW_RL_SECONDS = 2;
 
+	/** Backup-exposure re-check rate-limit transient prefix (per-user key appends the id). */
+	private const RECHECK_RL_PREFIX = 'ogwm_recheck_rl_';
+
+	/** Minimum seconds between two exposure re-checks for a single user. */
+	private const RECHECK_RL_SECONDS = 5;
+
 	/**
 	 * Test seam mirroring {@see \OrchardGrove\OgWatermark\Queue\Scheduler::$processorFactory}:
 	 * lets a test inject a fake Processor so the apply/remove handlers can be
@@ -94,6 +101,8 @@ final class Ajax {
 		add_action( 'wp_ajax_' . self::ACTION_BULK_PROGRESS, [ self::class, 'bulkProgress' ] );
 		add_action( 'wp_ajax_ogwm_preview', [ self::class, 'preview' ] );
 		add_action( 'wp_ajax_' . self::ACTION_REDETECT, [ self::class, 'redetectEngine' ] );
+		add_action( 'wp_ajax_ogwm_dismiss_backup_notice', [ self::class, 'dismissBackupNotice' ] );
+		add_action( 'wp_ajax_ogwm_recheck_backup_exposure', [ self::class, 'recheckBackupExposure' ] );
 	}
 
 	// =====================================================================
@@ -319,6 +328,57 @@ final class Ajax {
 		);
 	}
 
+	/**
+	 * Persist a dismissal of the backup-exposure notice.
+	 *
+	 * Order (settings-class gate): cap manage_options → nonce → record the
+	 * dismissal (keyed to the current base path inside Storage). No id to validate.
+	 */
+	public static function dismissBackupNotice(): void {
+		self::requireManageOptions();
+		self::requireNonce();
+
+		Storage::setNoticeDismissed();
+
+		wp_send_json_success( [ 'dismissed' => true ] );
+	}
+
+	/**
+	 * Actively re-measure whether the backups are web-reachable (the operator says
+	 * they just added a server-level deny rule) and tell the UI whether the notice
+	 * should stay.
+	 *
+	 * Order (settings-class gate): cap manage_options → nonce → Storage::probeExposure
+	 * → return {state, show}. `show` ignores dismissal (this is an explicit re-check),
+	 * so a now-'protected' folder returns show:false and the JS removes the notice.
+	 */
+	public static function recheckBackupExposure(): void {
+		self::requireManageOptions();
+		self::requireNonce();
+
+		// Throttle the synchronous loopback probe per user (the button also disables
+		// itself client-side), so a scripted loop can't fire many 5s wp_remote_get calls.
+		$rlKey = self::RECHECK_RL_PREFIX . ( function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0 );
+		if ( false !== get_transient( $rlKey ) ) {
+			wp_send_json_error(
+				[
+					'reason'  => 'rate-limited',
+					'message' => esc_html__( 'Slow down a moment — re-checking is rate-limited.', 'og-watermark' ),
+				]
+			);
+		}
+		set_transient( $rlKey, 1, self::RECHECK_RL_SECONDS );
+
+		$state = Storage::probeExposure();
+
+		wp_send_json_success(
+			[
+				'state' => esc_html( $state ),
+				'show'  => Storage::exposureShowsNotice(),
+			]
+		);
+	}
+
 	// =====================================================================
 	// Guard primitives — each emits a JSON error + dies on failure.
 	// =====================================================================
@@ -458,6 +518,8 @@ final class Ajax {
 				return __( 'This image is being processed — try again shortly.', 'og-watermark' );
 			case Outcome::TOO_LARGE:
 				return __( 'This image is too large to watermark on this server.', 'og-watermark' );
+			case Outcome::TOO_SMALL:
+				return __( 'This image is too small to carry the watermark.', 'og-watermark' );
 			case Outcome::BACKUP_MISSING:
 				return __( 'No clean backup is available, so this image cannot be watermarked.', 'og-watermark' );
 			case Outcome::SKIPPED:
@@ -494,6 +556,8 @@ final class Ajax {
 				return __( 'A bulk run is already in progress.', 'og-watermark' );
 			case 'insufficient-disk':
 				return __( 'Not enough disk space for the backups this run would create.', 'og-watermark' );
+			case 'scope-not-allowed':
+				return __( 'That bulk scope is not available.', 'og-watermark' );
 			default:
 				return __( 'Could not start the bulk run.', 'og-watermark' );
 		}

@@ -131,6 +131,18 @@ final class BulkRunner {
 	 * @return array{ok:bool,reason?:string,total?:int,estimate?:int}
 	 */
 	public static function start( string $scope, array $opts = [] ): array {
+		// The whole-library ('all') scope is intentionally DISABLED: it is not offered
+		// in the UI, and it is rejected here so even a hand-crafted request can never
+		// trigger a full-library flag-and-watermark run. Re-enabling it is a deliberate
+		// code change (re-add 'all' to normalizeScope + the Bulk Tools UI). The dormant
+		// keyset-cursor machinery below is left intact for that future path.
+		if ( 'all' === strtolower( trim( $scope ) ) ) {
+			return [
+				'ok'     => false,
+				'reason' => 'scope-not-allowed',
+			];
+		}
+
 		$scope = self::normalizeScope( $scope );
 
 		// 1) Refuse a second concurrent run — the global lock is the single gate.
@@ -673,6 +685,19 @@ final class BulkRunner {
 
 		$state['running']     = false;
 		$state['outstanding'] = 0;
+
+		// Reconcile the progress counters so a FINISHED run always reads as complete.
+		// A scope item is not credited to this run's done/failed when it already had a
+		// pending job at kick time (its bulk enqueue was deduped) — that image IS
+		// watermarked, by its own job, just not counted here. Rather than leaving the
+		// progress bar stalled below 100%, credit the un-attributed remainder as done.
+		$total  = isset( $state['total'] ) ? (int) $state['total'] : 0;
+		$done   = isset( $state['done'] ) ? (int) $state['done'] : 0;
+		$failed = isset( $state['failed'] ) ? (int) $state['failed'] : 0;
+		if ( $total > $done + $failed ) {
+			$state['done'] = $total - $failed;
+		}
+
 		update_option( self::OPTION_STATE, $state, false );
 
 		delete_option( self::OPTION_QUEUE );
@@ -936,7 +961,9 @@ final class BulkRunner {
 
 	/** Clamp a free-form scope to the supported set; default to 'flagged'. */
 	private static function normalizeScope( string $scope ): string {
-		return in_array( $scope, [ 'flagged', 'all', 'ids' ], true ) ? $scope : 'flagged';
+		// 'all' is intentionally NOT allowed (rejected earlier in start()); an unknown
+		// scope falls back to the safe 'flagged' set.
+		return in_array( $scope, [ 'flagged', 'ids' ], true ) ? $scope : 'flagged';
 	}
 
 	/**

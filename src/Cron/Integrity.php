@@ -307,6 +307,11 @@ final class Integrity {
 	private static function servedFilesWatermarked( int $id ): bool {
 		$status = (string) get_post_meta( $id, Meta::STATUS, true );
 
+		// STATUS_TOO_SMALL is deliberately EXCLUDED: a too-small attachment never wrote
+		// a stamp (the signature is withheld, the clean file stays in place), so its
+		// served files are clean and a lost backup is recoverable — not terminal.
+		// TOO_LARGE/FAILED are included as the conservative "assume the served set may
+		// be dirty" choice. Do not add TOO_SMALL here.
 		return in_array(
 			$status,
 			[ Meta::STATUS_WATERMARKED, Meta::STATUS_TOO_LARGE, Meta::STATUS_FAILED ],

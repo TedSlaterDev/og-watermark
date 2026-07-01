@@ -16,7 +16,7 @@ defined( 'WP_UNINSTALL_PLUGIN' ) || exit;
 // hook names are inlined. as_unschedule_all_actions() runs only when Action
 // Scheduler is present. This is unconditional: leftover cron events would fail
 // noisily once the plugin's callbacks are gone, whether or not data is kept.
-foreach ( [ 'ogwm_integrity_check', 'ogwm_tmp_reaper', 'ogwm_integrity_continue', 'ogwm_bulk_tick', 'ogwm_process_one' ] as $ogwm_hook ) {
+foreach ( [ 'ogwm_integrity_check', 'ogwm_tmp_reaper', 'ogwm_integrity_continue', 'ogwm_bulk_tick', 'ogwm_process_one', 'ogwm_backup_probe', 'ogwm_reprocess_drain' ] as $ogwm_hook ) {
 	wp_clear_scheduled_hook( $ogwm_hook );
 }
 

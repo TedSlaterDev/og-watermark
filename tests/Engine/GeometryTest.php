@@ -240,6 +240,20 @@ final class GeometryTest extends TestCase {
 		$this->assertNull( $p );
 	}
 
+	public function testMinDimensionBypassedForThePrimaryTarget(): void {
+		// Below min_dimension, but with enforcement OFF (the primary/full target),
+		// a placement is still returned — min_dimension only gates thumbnail sizes.
+		$text = Geometry::textPlacement( 800, 250, 200, 40, $this->settings( [ 'min_dimension_px' => 300 ] ), false );
+		$this->assertNotNull( $text );
+
+		$logo = Geometry::logoPlacement( 800, 250, 100, 100, $this->settings( [ 'min_dimension_px' => 300, 'scale_pct' => 10 ] ), false );
+		$this->assertNotNull( $logo );
+
+		// The 90%-width guard still applies even when min_dimension is bypassed.
+		$tooWide = Geometry::textPlacement( 1000, 250, 950, 40, $this->settings( [ 'min_dimension_px' => 300 ] ), false );
+		$this->assertNull( $tooWide );
+	}
+
 	public function testZeroOrNegativeDimensionsReturnNull(): void {
 		$this->assertNull( Geometry::logoPlacement( 0, 100, 10, 10, $this->settings() ) );
 		$this->assertNull( Geometry::logoPlacement( 100, 100, 0, 10, $this->settings() ) );

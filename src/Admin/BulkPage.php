@@ -97,7 +97,6 @@ final class BulkPage {
 		}
 
 		$flaggedCount = self::flaggedCount();
-		$allCount     = self::allImageCount();
 		$progress     = BulkRunner::progress();
 		$running      = ! empty( $progress['running'] );
 		$resume       = isset( $_GET['ogwm_resume'] ) && '1' === sanitize_key( (string) wp_unslash( $_GET['ogwm_resume'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only UI hint (auto-starts the run via the nonce-protected AJAX call), no state mutation here.
@@ -152,21 +151,6 @@ final class BulkPage {
 									</span>
 								</label>
 
-								<label class="ogwm-scope-option">
-									<input type="radio" name="ogwm_scope" value="all" />
-									<span class="ogwm-scope-label">
-										<strong><?php esc_html_e( 'Every image in the library', 'og-watermark' ); ?></strong>
-										<span class="description">
-											<?php
-											printf(
-												/* translators: %s: total number of images. */
-												esc_html__( 'Flag and watermark every image. %s total — this can take a while and roughly doubles storage for each image (a pristine backup is kept).', 'og-watermark' ),
-												'<strong>' . esc_html( number_format_i18n( $allCount ) ) . '</strong>'
-											);
-											?>
-										</span>
-									</span>
-								</label>
 							</fieldset>
 
 							<div class="ogwm-preflight notice notice-warning inline">

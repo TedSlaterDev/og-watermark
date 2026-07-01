@@ -184,7 +184,7 @@ final class MediaColumn {
 				// matches the current settings/logo/font/version — surfaced as its own
 				// pill with a re-apply affordance.
 				if ( StatusBadge::isStale( $id ) ) {
-					return self::badge( 'stale', esc_html__( 'Out of date', 'og-watermark' ), 'info' );
+					return self::badge( 'stale', esc_html__( 'Out of date', 'og-watermark' ), 'warn' );
 				}
 
 				$applied = (string) get_post_meta( $id, Meta::APPLIED_GMT, true );
@@ -215,6 +215,11 @@ final class MediaColumn {
 
 			case Meta::STATUS_TOO_LARGE:
 				return self::badge( 'failed', esc_html__( 'Too large', 'og-watermark' ), 'bad' );
+
+			case Meta::STATUS_TOO_SMALL:
+				// A benign "the image is too small to carry the mark" outcome — a muted
+				// pill, NOT the red error badge, so it reads as informational.
+				return self::badge( 'skipped', esc_html__( 'Too small', 'og-watermark' ), 'muted' );
 
 			case Meta::STATUS_SKIPPED_OFFLOADED:
 				return self::badge( 'skipped', esc_html__( 'Skipped', 'og-watermark' ), 'muted' );

@@ -67,8 +67,13 @@ final class Processor {
 	/** Lock key prefix; the full key is this + the attachment id. */
 	private const LOCK_PREFIX = 'ogwm_lock_';
 
-	/** Lock lifetime; refreshed each per-file commit so a long job never lapses. */
-	private const LOCK_TTL = 300;
+	/**
+	 * Lock lifetime, refreshed each per-file commit. Sized so a SINGLE slow stamp
+	 * (a huge original on a contended box, with set_time_limit(0)) cannot outlive
+	 * the lock between heartbeats and lapse mid-job — it matches the reaper's
+	 * MAX_JOB_RUNTIME ceiling, so the lock and the "stuck job" cutoff agree.
+	 */
+	private const LOCK_TTL = 1800;
 
 	/**
 	 * True while THIS class is mid-(re)generate, so the M5
@@ -281,7 +286,7 @@ final class Processor {
 			// per-token name bounds any stray temp to this one job, and this guarantees
 			// it is removed rather than left stranded.
 			try {
-				$result = Compositor::stamp( $path, $tmp, $mime, $settings, $logoPath );
+				$result = Compositor::stamp( $path, $tmp, $mime, $settings, $logoPath, $isRequired );
 
 				if ( Result::STAMPED === $result->status && $this->commitRename( $tmp, $path ) ) {
 					$sizesStamped[ $slug ] = time();
@@ -305,9 +310,11 @@ final class Processor {
 					// highest-value file) maps to failed, with the engine reason surfaced.
 					if ( $isRequired ) {
 						$requiredStamped = false;
-						$failStatus      = ( Result::TOO_LARGE === $result->status )
-							? Meta::STATUS_TOO_LARGE
-							: Meta::STATUS_FAILED;
+						$failStatus      = match ( $result->status ) {
+							Result::TOO_LARGE => Meta::STATUS_TOO_LARGE,
+							Result::TOO_SMALL => Meta::STATUS_TOO_SMALL,
+							default           => Meta::STATUS_FAILED,
+						};
 						$failReason = $result->status . ':' . $slug . ( '' !== $result->reason ? ' (' . $result->reason . ')' : '' );
 					}
 				}
@@ -582,6 +589,10 @@ final class Processor {
 
 		if ( Meta::STATUS_TOO_LARGE === $status ) {
 			return Outcome::tooLarge( $staged['sizesStamped'] );
+		}
+
+		if ( Meta::STATUS_TOO_SMALL === $status ) {
+			return Outcome::tooSmall( $staged['sizesStamped'] );
 		}
 
 		return Outcome::failed( $reason, $staged['sizesStamped'] );

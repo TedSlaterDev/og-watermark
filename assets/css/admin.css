@@ -520,27 +520,32 @@
 	color: #50575e;
 	border: 1px solid #dcdcde;
 }
-.ogwm-badge-watermarked {
+/*
+ * Tone modifiers — these are the classes MediaColumn::badge() actually emits
+ * (ogwm-badge-{good|info|warn|bad|muted}); the semantic status is carried in the
+ * data-status attribute. Colours reuse the WordPress admin status palette.
+ */
+.ogwm-badge-good {
 	background: #e7f7ed;
 	color: #146c2e;
 	border-color: #b7e3c6;
 }
-.ogwm-badge-queued {
+.ogwm-badge-info {
 	background: #f0f6fc;
 	color: #2161a4;
 	border-color: #cfe2f3;
 }
-.ogwm-badge-stale {
+.ogwm-badge-warn {
 	background: #fcf9e8;
 	color: #8a6d12;
 	border-color: #f0e6a6;
 }
-.ogwm-badge-error {
+.ogwm-badge-bad {
 	background: #fde8e8;
 	color: #b32d2e;
 	border-color: #f5b5b5;
 }
-.ogwm-badge-skipped {
+.ogwm-badge-muted {
 	background: #f0f0f1;
 	color: #646970;
 	border-color: #dcdcde;

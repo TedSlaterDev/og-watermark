@@ -25,10 +25,11 @@ final class Geometry {
 	public const MAX_PT = 240.0;
 
 	/**
-	 * Below this fraction of the image, a mark covering more than 90% of the
-	 * width is treated as "too big to place" and the size is skipped.
+	 * A mark wider than this fraction of the image width is treated as "too big to
+	 * place" and the size is skipped. Public so the Compositor can shrink text to
+	 * the SAME budget before it asks for placement.
 	 */
-	private const MAX_WIDTH_FRACTION = 0.9;
+	public const MAX_WIDTH_FRACTION = 0.9;
 
 	/**
 	 * Geometry for a logo watermark, or null to skip this image size.
@@ -41,13 +42,13 @@ final class Geometry {
 	 *
 	 * @param array<string,mixed> $settings Grouped settings (Options shape).
 	 */
-	public static function logoPlacement( int $imgW, int $imgH, int $logoW, int $logoH, array $settings ): ?Placement {
+	public static function logoPlacement( int $imgW, int $imgH, int $logoW, int $logoH, array $settings, bool $enforceMinDimension = true ): ?Placement {
 		if ( $imgW < 1 || $imgH < 1 || $logoW < 1 || $logoH < 1 ) {
 			return null;
 		}
 
 		$minDimension = self::intSetting( $settings, [ 'sizes', 'min_dimension_px' ], 0 );
-		if ( min( $imgW, $imgH ) < $minDimension ) {
+		if ( $enforceMinDimension && min( $imgW, $imgH ) < $minDimension ) {
 			return null;
 		}
 
@@ -78,13 +79,13 @@ final class Geometry {
 	 *
 	 * @param array<string,mixed> $settings Grouped settings (Options shape).
 	 */
-	public static function textPlacement( int $imgW, int $imgH, int $textW, int $textH, array $settings ): ?Placement {
+	public static function textPlacement( int $imgW, int $imgH, int $textW, int $textH, array $settings, bool $enforceMinDimension = true ): ?Placement {
 		if ( $imgW < 1 || $imgH < 1 || $textW < 1 || $textH < 1 ) {
 			return null;
 		}
 
 		$minDimension = self::intSetting( $settings, [ 'sizes', 'min_dimension_px' ], 0 );
-		if ( min( $imgW, $imgH ) < $minDimension ) {
+		if ( $enforceMinDimension && min( $imgW, $imgH ) < $minDimension ) {
 			return null;
 		}
 

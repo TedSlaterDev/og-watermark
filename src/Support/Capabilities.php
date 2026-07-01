@@ -67,7 +67,10 @@ final class Capabilities {
 	 */
 	public static function refresh(): array {
 		$caps = self::probe();
-		update_option( self::OPTION, $caps, true );
+		// autoload = false: the capability report is read only by admin/cron/CLI
+		// (the engine + settings screen), never on a front-end request, so it must
+		// not be loaded into memory on every page view at scale.
+		update_option( self::OPTION, $caps, false );
 		self::$cache = $caps;
 		return self::$cache;
 	}

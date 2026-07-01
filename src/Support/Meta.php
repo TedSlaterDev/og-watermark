@@ -44,6 +44,21 @@ final class Meta {
 	/** Last failure message, surfaced in the Media list column. */
 	public const LAST_ERROR = '_ogwm_last_error';
 
+	/**
+	 * Per-attachment queue-dedup marker ('1' while a job for this id is scheduled).
+	 * Per-id (replacing the old monolithic `ogwm_pending` option) so a concurrent
+	 * clear of one id can never lose the marker of another and strand it.
+	 */
+	public const PENDING = '_ogwm_pending';
+
+	/**
+	 * Set on a flagged attachment whose sizes a FOREIGN mass-regenerate rebuilt when
+	 * an immediate reprocess would flood the queue; a bounded, self-draining catch-up
+	 * ({@see \OrchardGrove\OgWatermark\Integration\MetadataListener::drain()}) clears
+	 * it and enqueues the reprocess in small batches.
+	 */
+	public const REPROCESS = '_ogwm_reprocess';
+
 	/** Never processed / not flagged. */
 	public const STATUS_NONE = 'none';
 
@@ -68,6 +83,9 @@ final class Meta {
 	/** Image exceeds the memory/size budget for this host. */
 	public const STATUS_TOO_LARGE = 'too_large';
 
+	/** Image is too small to carry the mark even after shrink-to-fit (benign skip). */
+	public const STATUS_TOO_SMALL = 'too_small';
+
 	/**
 	 * Every meta key this plugin owns. Used by uninstall (LIKE cleanup is the
 	 * primary path) and by audit/reporting code that needs to enumerate keys.
@@ -85,6 +103,8 @@ final class Meta {
 			self::SIZES_DONE,
 			self::APPLIED_GMT,
 			self::LAST_ERROR,
+			self::PENDING,
+			self::REPROCESS,
 		];
 	}
 
@@ -103,6 +123,7 @@ final class Meta {
 			self::STATUS_SKIPPED_OFFLOADED,
 			self::STATUS_BACKUP_MISSING,
 			self::STATUS_TOO_LARGE,
+			self::STATUS_TOO_SMALL,
 		];
 	}
 }

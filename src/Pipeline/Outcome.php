@@ -21,6 +21,7 @@ defined( 'ABSPATH' ) || exit;
  *  - failed         — a hard error (regenerate failure, or the highest-value file failed to stamp).
  *  - backup_missing — no valid pristine backup, so nothing may be (re)derived.
  *  - too_large      — the full/-scaled file exceeded the memory budget; not watermarked.
+ *  - too_small      — the image is too small to carry the mark even after shrink-to-fit (benign).
  *  - locked         — another worker holds the per-attachment lock; try later.
  *  - restored       — the pristine original + clean sizes were put back and meta cleared.
  *
@@ -36,6 +37,7 @@ final class Outcome {
 	public const FAILED         = 'failed';
 	public const BACKUP_MISSING = 'backup_missing';
 	public const TOO_LARGE      = 'too_large';
+	public const TOO_SMALL      = 'too_small';
 	public const LOCKED         = 'locked';
 	public const RESTORED       = 'restored';
 
@@ -92,6 +94,16 @@ final class Outcome {
 	 */
 	public static function tooLarge( array $sizesStamped = [] ): self {
 		return new self( self::TOO_LARGE, 'full-image-too-large', $sizesStamped );
+	}
+
+	/**
+	 * The image is too small to carry the mark even after shrink-to-fit. A BENIGN,
+	 * informational outcome (not a hard failure), so the UI messages it neutrally.
+	 *
+	 * @param array<string,int> $sizesStamped Any lesser sizes that did stamp.
+	 */
+	public static function tooSmall( array $sizesStamped = [] ): self {
+		return new self( self::TOO_SMALL, 'image-too-small', $sizesStamped );
 	}
 
 	/** Another worker holds the per-attachment lock. */

@@ -75,9 +75,15 @@ final class Plugin {
 
 		// Re-create the backup directory hardening if it goes missing, and warn
 		// when the backup base is web-reachable on a server that ignores our
-		// per-directory deny files (e.g. nginx).
+		// per-directory deny files (e.g. nginx). The notice is dismissible + self-
+		// clearing; enqueueNoticeAssets loads its helper only when it will render.
 		add_action( 'admin_init', [ Storage::class, 'selfHeal' ] );
 		add_action( 'admin_notices', [ Storage::class, 'maybeNotice' ] );
+		add_action( 'admin_enqueue_scripts', [ Storage::class, 'enqueueNoticeAssets' ] );
+
+		// The exposure probe runs off the request path via wp-cron, so its handler
+		// must be registered unconditionally (a cron request has no admin context).
+		add_action( Storage::PROBE_HOOK, [ Storage::class, 'probeExposure' ] );
 
 		// M6: register the background-queue handlers unconditionally so Action
 		// Scheduler / wp-cron can always fire the ogwm_process_one + ogwm_bulk_tick
@@ -125,10 +131,13 @@ final class Plugin {
 
 	/**
 	 * One-time data migrations, run when the stored version changes. Each step
-	 * is idempotent and no-ops once applied. No migrations exist yet.
+	 * is idempotent and no-ops once applied.
 	 */
 	private function migrate(): void {
-		// M3+: migrate settings/meta shapes here as the data model evolves.
+		// 1.2.3: the queue-dedup set moved from the monolithic `ogwm_pending` option
+		// to per-attachment `_ogwm_pending` meta. Drop the now-orphaned option (the
+		// per-id markers are re-seeded naturally on the next enqueue). Idempotent.
+		delete_option( 'ogwm_pending' );
 	}
 
 	public static function activate(): void {
@@ -156,5 +165,11 @@ final class Plugin {
 		if ( class_exists( Cron::class ) ) {
 			Cron::unschedule();
 		}
+
+		// Clear any queued one-off events the plugin owns (the exposure probe and the
+		// reprocess-catch-up drain) so a pending single event can't fire after
+		// deactivation.
+		wp_clear_scheduled_hook( Storage::PROBE_HOOK );
+		wp_clear_scheduled_hook( Integration\MetadataListener::DRAIN_HOOK );
 	}
 }

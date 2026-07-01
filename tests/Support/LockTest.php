@@ -207,6 +207,24 @@ final class LockTest extends TestCase {
 		$this->assertFalse( Lock::refresh( self::KEY, $token, 300 ), 'a different live owner means the lock is genuinely lost' );
 	}
 
+	public function testCacheRefreshDoesNotStompAConcurrentAcquirerAfterEviction(): void {
+		$token = Lock::acquire( self::KEY, 300 );
+		$this->assertIsString( $token );
+
+		// The backend drops our value AND a concurrent worker atomically acquires the
+		// now-free key in the gap. Our heartbeat must NOT blind-re-assert over the new
+		// owner (the two-holders race that would let both stamp the same files) — it
+		// must report the lock lost and leave the new owner intact.
+		$this->cache = [];
+		$other       = Lock::acquire( self::KEY, 300 );
+		$this->assertIsString( $other );
+		$this->assertNotSame( $token, $other );
+
+		$this->assertFalse( Lock::refresh( self::KEY, $token, 300 ), 'must not stomp a concurrent acquirer' );
+		$this->assertTrue( Lock::held( self::KEY ) );
+		$this->assertTrue( Lock::refresh( self::KEY, $other, 300 ), 'the real owner still heartbeats' );
+	}
+
 	// =====================================================================
 	// Options-table fallback (no persistent object cache).
 	// =====================================================================
@@ -281,6 +299,68 @@ final class LockTest extends TestCase {
 
 		$this->expireOption( self::KEY );
 		$this->assertFalse( Lock::refresh( self::KEY, $token, 30 ), 'a lapsed lock cannot be heartbeated' );
+	}
+
+	public function testOptionsRefreshSelfHealsWhenHostOptionCacheReturnsAStaleMiss(): void {
+		$this->persistentCache = false;
+
+		$token = Lock::acquire( self::KEY, 300 );
+		$this->assertIsString( $token );
+
+		// Model a host options-read cache (e.g. WordKeeper's "Speed > WP Options")
+		// returning a STALE MISS for the non-autoloaded lock row we just wrote: the
+		// row reads as absent even though the TTL has not lapsed and we still hold it.
+		// The strict pre-1.1.2 options heartbeat aborted here with "lock-lost"; the
+		// self-healing heartbeat must re-assert ownership and continue instead.
+		$this->options = [];
+		$this->assertTrue( Lock::refresh( self::KEY, $token, 300 ), 'a stale options-read miss must self-heal, not fail' );
+		$this->assertTrue( Lock::held( self::KEY ), 'the re-asserted options lock is held again' );
+
+		// A genuinely different live owner must STILL lose the original owner's
+		// heartbeat — the self-heal never steals another worker's lock.
+		$this->options = [];
+		$other = Lock::acquire( self::KEY, 300 );
+		$this->assertIsString( $other );
+		$this->assertNotSame( $token, $other );
+		$this->assertFalse( Lock::refresh( self::KEY, $token, 300 ), 'a different live owner is a genuine loss' );
+	}
+
+	public function testOptionsRefreshDoesNotStompAConcurrentAcquirerAfterLapse(): void {
+		$this->persistentCache = false;
+
+		$token = Lock::acquire( self::KEY, 300 );
+		$this->assertIsString( $token );
+
+		// The row genuinely lapses/disappears and a competitor reclaims it. Our
+		// heartbeat's atomic re-claim must FAIL (the row is now the competitor's), so
+		// we report lost rather than overwriting their token.
+		$this->options = [];
+		$other         = Lock::acquire( self::KEY, 300 );
+		$this->assertIsString( $other );
+		$this->assertNotSame( $token, $other );
+
+		$this->assertFalse( Lock::refresh( self::KEY, $token, 300 ), 'must not stomp the new owner' );
+		$this->assertTrue( Lock::refresh( self::KEY, $other, 300 ) );
+	}
+
+	public function testOptionsReleaseClearsTheLockDespiteAStaleMiss(): void {
+		$this->persistentCache = false;
+
+		$token = Lock::acquire( self::KEY, 300 );
+		$this->assertIsString( $token );
+
+		// The host's options-read cache hides our own row (stale miss). release() must
+		// still report success and guarantee the key is free, so a re-apply within the
+		// TTL is never blocked by a lingering lock.
+		$this->options = [];
+		$this->assertTrue( Lock::release( self::KEY, $token ), 'release must tolerate a stale-miss of our own row' );
+		$this->assertFalse( Lock::held( self::KEY ) );
+
+		// But release must NEVER free a DIFFERENT live owner's lock.
+		$token2 = Lock::acquire( self::KEY, 300 );
+		$this->assertIsString( $token2 );
+		$this->assertFalse( Lock::release( self::KEY, 'stale-other' ), 'a non-owner must not release a live lock' );
+		$this->assertTrue( Lock::held( self::KEY ) );
 	}
 
 	public function testMalformedOptionsEntryIsTreatedAsFreeAndReclaimed(): void {

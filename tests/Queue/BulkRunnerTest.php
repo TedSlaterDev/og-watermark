@@ -65,6 +65,9 @@ final class BulkRunnerTest extends TestCase {
 	/** Monotonic token source so each Lock::acquire() yields a distinct token. */
 	private int $tokenSeq = 0;
 
+	/** @var array<int,array<string,mixed>> In-memory post meta (holds the per-id pending markers). */
+	private array $meta = [];
+
 	protected function setUp(): void {
 		parent::setUp();
 
@@ -149,26 +152,39 @@ final class BulkRunnerTest extends TestCase {
 	}
 
 	public function testStartRefusesOnInsufficientDisk(): void {
-		// Drive the REAL Preflight::hasDiskSpaceFor to refuse by making the scope's
-		// projected backup growth absurd (≈ 1 PB) so no real disk can hold it. The
-		// 'all'-scope estimate is count × per-attachment average, and the count comes
-		// from the (faked) COUNT query — so a ~200M "library" yields a petabyte
-		// estimate against the real temp-dir free space. A handful of pages would be
-		// claimed if we ever proceeded, but we must refuse before touching anything.
-		$this->library      = [ 1, 2, 3 ];      // tiny real page set, irrelevant here.
-		$this->libraryCount = 200_000_000;       // → ~1 PB estimate.
+		// Point one flagged attachment's "original" at a SPARSE file whose APPARENT
+		// size is astronomically large (real disk usage ~0). estimateForIds() sums
+		// filesize(), so the projected backup growth dwarfs any real disk and the REAL
+		// Preflight::hasDiskSpaceFor refuses before anything is reserved. This is
+		// deterministic and machine-independent WITHOUT stubbing the internal
+		// disk_free_space()/filesize() (which Patchwork cannot redefine here), and
+		// replaces the old 'all'-scope count-based petabyte estimate (now disabled).
+		$huge = sys_get_temp_dir() . '/ogwm-huge-' . uniqid( '', true ) . '.jpg';
+		$fh   = fopen( $huge, 'wb' );
+		$this->assertIsResource( $fh );
+		fseek( $fh, 50 * ( 1024 ** 4 ) ); // 50 TiB apparent size.
+		fwrite( $fh, "\0" );
+		fclose( $fh );
+		clearstatcache( true, $huge );
 
-		$result = BulkRunner::start( 'all' );
+		Functions\when( 'wp_get_original_image_path' )->justReturn( $huge );
+		$this->flagged = [ 1 ];
 
-		$this->assertFalse( $result['ok'] );
-		$this->assertSame( 'insufficient-disk', $result['reason'] );
-		$this->assertArrayHasKey( 'estimate', $result );
-		$this->assertGreaterThan( 0, $result['estimate'] );
+		try {
+			$result = BulkRunner::start( 'flagged' );
 
-		// Refused BEFORE the lock was taken, so a later run can still start.
-		$this->assertFalse( $this->bulkLockHeld() );
-		$this->assertArrayNotHasKey( 'ogwm_bulk_queue', $this->options );
-		$this->assertArrayNotHasKey( 'ogwm_bulk_state', $this->options );
+			$this->assertFalse( $result['ok'] );
+			$this->assertSame( 'insufficient-disk', $result['reason'] );
+			$this->assertArrayHasKey( 'estimate', $result );
+			$this->assertGreaterThan( 0, $result['estimate'] );
+
+			// Refused BEFORE the lock was taken, so a later run can still start.
+			$this->assertFalse( $this->bulkLockHeld() );
+			$this->assertArrayNotHasKey( 'ogwm_bulk_queue', $this->options );
+			$this->assertArrayNotHasKey( 'ogwm_bulk_state', $this->options );
+		} finally {
+			@unlink( $huge ); // phpcs:ignore WordPress.PHP.NoSilencedErrors
+		}
 	}
 
 	public function testStartWithEmptyFlaggedSetReturnsZeroTotalAndDoesNotLock(): void {
@@ -312,94 +328,28 @@ final class BulkRunnerTest extends TestCase {
 	}
 
 	// =====================================================================
-	// 'all' scope: paged cursor, never materializing the full id set.
+	// 'all' scope is DISABLED (whole-library flag-and-watermark removed).
 	// =====================================================================
 
-	public function testStartAllScopeStoresACursorNotTheFullIdList(): void {
-		$this->library = range( 1, 1000 ); // a "big library".
+	public function testStartRejectsTheDisabledAllScope(): void {
+		// The whole-library scope is not offered in the UI and is rejected outright,
+		// so even a crafted request can never trigger a full-library run. It must
+		// refuse WITHOUT taking the lock or seeding any run state, and never fall back
+		// to silently running 'flagged'.
+		$this->library = range( 1, 1000 );
+		$this->flagged = [ 5, 6, 7 ];
 
 		$result = BulkRunner::start( 'all' );
 
-		$this->assertTrue( $result['ok'] );
-		$this->assertSame( 1000, $result['total'], 'total comes from a COUNT, not a materialized list' );
-
-		$queue = $this->options['ogwm_bulk_queue'];
-		$this->assertSame( 'cursor', $queue['mode'] );
-		$this->assertSame( 0, $queue['cursor'] );
-		// CRITICAL: the queue is a cursor, NOT a 1000-element id array.
-		$this->assertArrayNotHasKey( 'ids', $queue );
-	}
-
-	public function testAllScopePagesAcrossTicksViaCursorWithoutMaterializingIds(): void {
-		// 12 images, BATCH_SIZE 5 → ticks claim 5, 5, 2; then drains.
-		$this->library = [ 3, 7, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36 ];
-
-		BulkRunner::start( 'all' );
-		$this->assertSame( 12, $this->options['ogwm_bulk_state']['total'] );
-
-		// Tick 1: first 5 by ascending id; cursor advances to the 5th id (15).
-		BulkRunner::tick();
-		$this->assertSame( [ 3, 7, 9, 12, 15 ], array_column( $this->processed, 'id' ) );
-		$this->assertSame( 15, $this->options['ogwm_bulk_queue']['cursor'] );
-		$this->assertSame( 5, $this->options['ogwm_bulk_state']['done'] );
-		$this->assertTrue( $this->options['ogwm_bulk_state']['running'] );
-
-		// Tick 2: next 5 (18..30), cursor → 30.
-		BulkRunner::tick();
-		$this->assertSame( [ 3, 7, 9, 12, 15, 18, 21, 24, 27, 30 ], array_column( $this->processed, 'id' ) );
-		$this->assertSame( 30, $this->options['ogwm_bulk_queue']['cursor'] );
-
-		// Tick 3: final 2 (33, 36), then the cursor peek finds nothing → drain.
-		BulkRunner::tick();
-		$this->assertSame(
-			[ 3, 7, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36 ],
-			array_column( $this->processed, 'id' )
-		);
-		$this->assertSame( 12, $this->options['ogwm_bulk_state']['done'] );
-		$this->assertFalse( $this->options['ogwm_bulk_state']['running'], 'the cursor drained → run finished' );
+		$this->assertFalse( $result['ok'] );
+		$this->assertSame( 'scope-not-allowed', $result['reason'] );
+		$this->assertFalse( $this->bulkLockHeld(), 'a rejected scope must not take the lock' );
 		$this->assertArrayNotHasKey( 'ogwm_bulk_queue', $this->options );
-		$this->assertFalse( $this->bulkLockHeld() );
-	}
+		$this->assertArrayNotHasKey( 'ogwm_bulk_state', $this->options );
+		$this->assertSame( [], $this->processed, 'nothing may be processed for a rejected scope' );
 
-	public function testAllScopeTerminatesEvenWhenTheKeysetHintIsIgnored(): void {
-		// Model a host WP_Query that IGNORES the ogwm_after_id keyset bound entirely:
-		// it always returns the lowest ids from the start of the library (capped by
-		// posts_per_page), as if neither the posts_where filter NOR the keyset arg
-		// applied. The ONLY thing standing between this and an infinite re-claim loop
-		// is BulkRunner's defensive id>cursor filter + cursor-stall terminator.
-		$library = [ 3, 7, 9, 12, 15, 18, 21, 24 ];
-		WpQueryDouble::$resolver = static function ( array $args ) use ( $library ): array {
-			$page = isset( $args['posts_per_page'] ) ? (int) $args['posts_per_page'] : -1;
-			sort( $library );
-			$slice = ( $page > 0 ) ? array_slice( $library, 0, $page ) : $library;
-			return [
-				'posts'       => $slice,        // NB: NOT filtered by ogwm_after_id.
-				'found_posts' => count( $library ),
-			];
-		};
-
-		BulkRunner::start( 'all' );
-		$this->assertSame( 8, $this->options['ogwm_bulk_state']['total'] );
-
-		// Tick 1: claims the first page (3..15 by ascending id), cursor → 15.
-		BulkRunner::tick();
-		$this->assertSame( [ 3, 7, 9, 12, 15 ], array_column( $this->processed, 'id' ) );
-
-		// Tick 2+: the resolver keeps returning [3,7,9,12,15] (ignoring the cursor),
-		// but the defensive id>15 filter strips ALL of them → the claim is empty → the
-		// queue is dropped and the run finishes. It must NOT re-claim 3..15 forever.
-		$ticks = 0;
-		while ( ! empty( $this->options['ogwm_bulk_state']['running'] ) && $ticks < 50 ) {
-			BulkRunner::tick();
-			++$ticks;
-		}
-
-		$this->assertLessThan( 50, $ticks, 'tick() must terminate, not loop forever, under a misbehaving keyset query' );
-		$this->assertFalse( $this->options['ogwm_bulk_state']['running'], 'the run must finish rather than spin' );
-		$this->assertFalse( $this->bulkLockHeld(), 'a terminated run must release the lock' );
-		// No id was ever re-claimed: each processed id is unique.
-		$ids = array_column( $this->processed, 'id' );
-		$this->assertSame( array_values( array_unique( $ids ) ), $ids, 'no id may be re-claimed across ticks' );
+		// Case/whitespace variants are rejected too (no bypass).
+		$this->assertSame( 'scope-not-allowed', BulkRunner::start( ' ALL ' )['reason'] );
 	}
 
 	// =====================================================================
@@ -482,6 +432,37 @@ final class BulkRunnerTest extends TestCase {
 		// With the lock truly freed, a fresh run can start.
 		$this->flagged = [ 99 ];
 		$this->assertTrue( BulkRunner::start( 'flagged' )['ok'] );
+	}
+
+	public function testFinishReconcilesProgressWhenAScopeItemWasAlreadyPending(): void {
+		// A flagged image already has a pending job (e.g. it was just edited) when the
+		// bulk run starts, so its bulk enqueue is deduped and NOT counted toward this
+		// run — its own job watermarks it. Without reconciliation the progress bar would
+		// stall below 100%; finish() must credit the un-attributed item as done.
+		BulkRunner::$forceActionScheduler                               = true;
+		\OrchardGrove\OgWatermark\Queue\Scheduler::$forceActionScheduler = true;
+		Functions\when( 'as_enqueue_async_action' )->justReturn( 1 );
+
+		$this->flagged            = [ 41, 42, 43 ];
+		$this->meta[41]['_ogwm_pending'] = '1'; // id 41 already has a pending job → deduped.
+
+		$result = BulkRunner::start( 'flagged' );
+		$this->assertSame( 3, $result['total'] );
+
+		$token = $this->options['ogwm_bulk_state']['lock'];
+		// Only 42 and 43 were enqueued for THIS run (41 was deduped).
+		$this->assertSame( 2, $this->options['ogwm_bulk_state']['outstanding'] );
+
+		// The two enqueued jobs complete → outstanding hits 0 → finish() reconciles.
+		BulkRunner::recordJobResult( true, $token );
+		BulkRunner::recordJobResult( true, $token );
+
+		$progress = BulkRunner::progress();
+		$this->assertFalse( $progress['running'], 'the run finished' );
+		$this->assertSame( 3, $progress['total'] );
+		$this->assertSame( 3, $progress['done'], 'the deduped item is credited so the bar reads 100%' );
+		$this->assertSame( 0, $progress['failed'] );
+		$this->assertSame( $progress['total'], $progress['done'] + $progress['failed'] );
 	}
 
 	public function testRecordJobResultIgnoresAStragglerFromAFinishedRun(): void {
@@ -584,6 +565,23 @@ final class BulkRunnerTest extends TestCase {
 					return false;
 				}
 				unset( $this->options[ $name ] );
+				return true;
+			}
+		);
+
+		// Per-id post meta — the Scheduler's dedup markers (_ogwm_pending) live here now.
+		Functions\when( 'get_post_meta' )->alias(
+			fn( $id, $key, $single = false ) => $this->meta[ (int) $id ][ $key ] ?? ''
+		);
+		Functions\when( 'update_post_meta' )->alias(
+			function ( $id, $key, $value ) {
+				$this->meta[ (int) $id ][ $key ] = $value;
+				return true;
+			}
+		);
+		Functions\when( 'delete_post_meta' )->alias(
+			function ( $id, $key ) {
+				unset( $this->meta[ (int) $id ][ $key ] );
 				return true;
 			}
 		);

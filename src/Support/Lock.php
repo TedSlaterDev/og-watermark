@@ -41,17 +41,27 @@ defined( 'ABSPATH' ) || exit;
  * that overran its TTL (and whose lock was reclaimed by another) can never
  * delete or extend the new owner's lock.
  *
- * OWNER-GUARD SCOPE: on the cache backend release()/refresh() do a wp_cache_get
- * then a wp_cache_delete/wp_cache_set — a BEST-EFFORT owner check, not an atomic
- * compare-and-swap. A vanishingly small window exists where, AFTER this worker's
- * TTL has lapsed and another worker has reclaimed the key, this worker's get could
- * see the new owner's token (it would not — tokens differ — so the guard still
- * holds) or, more precisely, the get/act pair is not transactional. The real
- * safety property is the ATOMIC acquire (wp_cache_add / add_option store-iff-
- * absent); release/refresh on the cache backend are owner-checked best-effort. The
- * options backend reads a stored expiry so a lapsed entry is already treated as
- * free. In practice the Processor heartbeats well within the TTL, so the lapse
- * window does not open during a normal job.
+ * OWNER-GUARD SCOPE: release()/refresh() do a read-then-act (wp_cache_get / a
+ * get_option ownerState classify, then a set/delete) — a BEST-EFFORT owner check,
+ * not an atomic compare-and-swap. The real safety property is the ATOMIC acquire
+ * (wp_cache_add / add_option store-iff-absent); release/refresh are owner-checked
+ * best-effort. Critically, the heartbeat must fail ONLY when it can POSITIVELY read
+ * a DIFFERENT live owner — never merely because it cannot read its OWN row:
+ *
+ *  - Cache backend: a persistent object cache may evict (or simply fail to return)
+ *    what add() stored, mid-request and well within the TTL.
+ *  - Options backend: a host that wraps the options table in its own read cache
+ *    (e.g. WordKeeper's "Speed > WP Options") can return a STALE MISS for the
+ *    non-autoloaded lock row we just wrote.
+ *
+ * Either of those, treated as "lock lost", aborted every watermark with reason
+ * "lock-lost" on real hosts. So both backends SELF-HEAL: a missing/own read
+ * re-asserts ownership and continues; only a positively-read different owner (or,
+ * on the options backend, a genuinely lapsed stored expiry) denies the heartbeat.
+ * A single apply / a deduped bulk job has no competing writer on the same id, and
+ * the immutable backup remains the real correctness gate, so re-asserting is safe.
+ * In practice the Processor heartbeats well within the TTL, so the lapse window
+ * does not open during a normal job.
  */
 final class Lock {
 
@@ -113,31 +123,62 @@ final class Lock {
 
 		if ( self::usesCache() ) {
 			$cached = wp_cache_get( $key, self::GROUP );
-			// A DIFFERENT, present token is the ONLY genuine "lost lock": another
-			// owner reclaimed the key after our TTL lapsed. A MISSING value is NOT a
-			// lost lock — some persistent object caches evict (or simply fail to
-			// return) what add() stored, mid-request and well within the TTL. Observed
-			// in the wild: that produced spurious heartbeat failures that aborted every
-			// watermark with reason "lock-lost". A worker that truly overran the TTL
-			// would not be calling refresh() at all, so a missing value here means
-			// eviction, not expiry — we self-heal by re-asserting our ownership and
-			// continue. This never overrides a different live owner (rejected above),
-			// and a single apply / a deduped bulk job has no competing writer on the
-			// same id, so the immutable backup remains the real correctness gate.
-			if ( is_string( $cached ) && '' !== $cached && ! hash_equals( $cached, $token ) ) {
-				return false;
+
+			// A value is PRESENT: ours → heartbeat; a different token → genuinely lost
+			// (another owner reclaimed the key after our TTL lapsed).
+			if ( is_string( $cached ) && '' !== $cached ) {
+				if ( ! hash_equals( $cached, $token ) ) {
+					return false;
+				}
+				// Extend; do NOT gate on wp_cache_set()'s return — some drop-ins return
+				// false spuriously (e.g. an unchanged value), which is not a lost lock.
+				wp_cache_set( $key, $token, self::GROUP, $ttl );
+				return true;
 			}
-			return (bool) wp_cache_set( $key, $token, self::GROUP, $ttl );
+
+			// MISSING (evicted, or a stale read). We must NOT blind-set here: if the key
+			// truly lapsed, a concurrent worker's atomic acquire() may have taken it in
+			// the gap, and a blind wp_cache_set() would stomp that new owner — leaving
+			// TWO workers each believing they hold the lock, stamping+renaming the same
+			// files concurrently. Re-claim with the store-iff-absent primitive instead
+			// (the same compare-and-swap acquire() uses): a success means the key really
+			// was free and we hold it again; a failure means someone else took it, so we
+			// hold it ONLY if the present token is now ours.
+			if ( wp_cache_add( $key, $token, self::GROUP, $ttl ) ) {
+				return true;
+			}
+			$current = wp_cache_get( $key, self::GROUP );
+			return is_string( $current ) && '' !== $current && hash_equals( $current, $token );
 		}
 
-		// The options backend stores an explicit expiry, so it keeps strict semantics:
-		// a lapsed or reclaimed lock (readOption() === null) cannot be heartbeated.
-		$stored = self::readOption( $key );
-		if ( null === $stored || ! hash_equals( $stored['token'], $token ) ) {
+		// Options backend. This host has no persistent object cache, but some managed
+		// hosts wrap the OPTIONS table in their own read cache (e.g. WordKeeper's
+		// "Speed > WP Options") that returns a STALE MISS for the non-autoloaded lock
+		// row we just wrote — making it read as absent even though we still hold it. So
+		// we fail ONLY on a positively-read different/expired owner.
+		$state = self::ownerState( $key, $token );
+		if ( 'own' === $state ) {
+			self::writeOption( $key, $token, $ttl ); // heartbeat (ignore false-on-unchanged).
+			return true;
+		}
+		if ( 'foreign' === $state || 'expired' === $state ) {
+			// A different live owner (or a wrong-token caller), or a genuinely lapsed
+			// TTL — a stalled worker must not resurrect a lock another may have taken.
 			return false;
 		}
 
-		return self::writeOption( $key, $token, $ttl );
+		// 'absent'. Re-claim ATOMICALLY first — add_option()'s UNIQUE index is a
+		// store-iff-absent, so a SUCCESS means the row was genuinely free and we now
+		// re-hold it (no competitor can have raced in). A FAILURE means a row physically
+		// exists in the DB; and because that atomic insert is IMMUNE to the host's stale
+		// read cache, no competitor could have inserted over a present row — so a present
+		// row during our OWN heartbeat is our own lock that the option cache merely
+		// failed to return (the WordKeeper stale-miss), which we self-heal.
+		if ( self::addOption( $key, $token, $ttl ) ) {
+			return true;
+		}
+		self::writeOption( $key, $token, $ttl );
+		return true;
 	}
 
 	/**
@@ -159,8 +200,11 @@ final class Lock {
 			return true;
 		}
 
-		$stored = self::readOption( $key );
-		if ( null === $stored || ! hash_equals( $stored['token'], $token ) ) {
+		// Mirror refresh()'s tolerance: a host options-read cache can return a stale
+		// MISS for our own row, which must NOT strand the lock. Refuse only when a
+		// DIFFERENT live owner holds it; otherwise ensure the row is gone so the next
+		// apply on this id is never blocked by a lingering lock.
+		if ( 'foreign' === self::ownerState( $key, $token ) ) {
 			return false;
 		}
 
@@ -241,6 +285,44 @@ final class Lock {
 			'token'   => $token,
 			'expires' => $expires,
 		];
+	}
+
+	/**
+	 * Classify the options-backend lock for $token WITHOUT mutating it. Used by the
+	 * owner-guarded refresh()/release() so a host options-read cache that returns a
+	 * stale MISS for our own non-autoloaded row is not mistaken for a lost lock.
+	 *
+	 *  - 'own'     — a live row whose stored token is ours.
+	 *  - 'foreign' — a live row owned by a DIFFERENT token (a genuine takeover, or a
+	 *                wrong-token caller); the ONLY state that must deny refresh and
+	 *                release.
+	 *  - 'expired' — a row present but past its stored expiry (a true TTL lapse).
+	 *  - 'absent'  — no readable row. On most hosts that means gone, but on a host
+	 *                that caches option reads it can also be a STALE MISS of a row we
+	 *                just wrote and still own, so the heartbeat treats it as "ours".
+	 *
+	 * @param string $key   Lock key.
+	 * @param string $token Owner token to compare against.
+	 * @return 'own'|'foreign'|'expired'|'absent'
+	 */
+	private static function ownerState( string $key, string $token ): string {
+		$raw = get_option( $key, false );
+		if ( false === $raw || ! is_array( $raw ) ) {
+			return 'absent';
+		}
+
+		$stored  = isset( $raw['token'] ) && is_string( $raw['token'] ) ? $raw['token'] : '';
+		$expires = isset( $raw['expires'] ) ? (int) $raw['expires'] : 0;
+
+		if ( '' === $stored ) {
+			return 'absent';
+		}
+
+		if ( $expires > 0 && self::now() >= $expires ) {
+			return 'expired';
+		}
+
+		return hash_equals( $stored, $token ) ? 'own' : 'foreign';
 	}
 
 	/**

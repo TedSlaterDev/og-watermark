@@ -4,7 +4,7 @@ Tags: watermark, images, media, branding, copyright
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 1.1.1
+Stable tag: 1.2.4
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -150,6 +150,24 @@ maintenance schedule, set up automatically the first time the site loads.
 
 == Upgrade Notice ==
 
+= 1.2.4 =
+More large-site hardening: the queue's duplicate-guard is now per-image (so a busy site can't strand an image as permanently "pending"), a mass thumbnail regenerate no longer floods the queue (it is paced by a self-draining catch-up), and the "Every image in the library" bulk option has been removed. Recommended for large/high-concurrency sites.
+
+= 1.2.3 =
+Hardening for high-traffic / high-concurrency sites (from a pre-launch audit): the per-image lock now uses an atomic compare-and-swap on re-claim so two workers can never process the same image at once, its lifetime was raised so a slow stamp can't lapse mid-job, processing errors no longer store raw (path-bearing) messages in postmeta, the capability report is no longer autoloaded, and the optional srcset filter only attaches when actually enabled (zero front-end hooks by default). Recommended for everyone, important for large sites.
+
+= 1.2.2 =
+The backup-exposure warning now appears only on the OG Watermark settings screen instead of on every wp-admin page, and the media-library status badges are now colour-coded (green "Watermarked", red "Error", amber "Out of date", etc.) instead of all showing gray.
+
+= 1.2.1 =
+Fixes text watermarks failing with an "Error" on many images: the text now shrinks to fit instead of being rejected when it is wider (or taller) than the image, the image you flag is always marked even if it is smaller than the thumbnail "minimum size" setting, and an image that is genuinely too small now reads as a neutral "Too small" instead of a red error. Recommended for anyone using text mode.
+
+= 1.2.0 =
+The "backups are in the public web directory" warning is now dismissible (click the X and it stays gone) and self-clearing: the plugin actively checks whether the backup folder is really reachable and hides the notice once you have secured it (e.g. added an nginx deny rule). A "Re-check now" button lets you confirm a fix immediately.
+
+= 1.1.2 =
+Completes the 1.1.1 "lock lost" fix for hosts WITHOUT a persistent object cache (e.g. WordKeeper) whose options-table read cache returned a stale miss for the lock — clicking Watermark still showed an error even though thumbnails were created. The per-image lock heartbeat now self-heals on both backends. Strongly recommended if 1.1.1 did not resolve the error.
+
 = 1.1.1 =
 Fixes a "lock lost" error (and partial, aborted watermarking) on hosts with a persistent object cache, where clicking Watermark showed an error even though some thumbnails were created. Recommended for those hosts.
 
@@ -167,8 +185,36 @@ from 0.7.0; your settings and backups are preserved.
 
 == Changelog ==
 
-= 1.1.1 =
-* Fix: on hosts with a persistent object cache that evicts entries early, the per-image lock heartbeat could falsely report "lock lost" mid-run — aborting after the first size and showing an error in the UI even though some thumbnails were already watermarked. The heartbeat now self-heals on eviction (re-asserts ownership when no other worker holds the lock) and fails only when a different live owner has genuinely taken over, so a watermark completes every size cleanly. The options-table lock backend (hosts without a persistent object cache) is unchanged.
+= 1.2.4 =
+* Fix (concurrency): the background-queue duplicate guard moved from a single shared `ogwm_pending` option to a per-attachment `_ogwm_pending` marker. Under concurrent workers the shared option could lose a write (last-writer-wins) and strand an image as permanently "pending", so it would silently never get (re)watermarked. Per-image markers cannot collide. The old option is cleaned up on upgrade. The enqueue path also now rolls the marker back if the underlying scheduler refuses the job (e.g. a cron-replacement plugin or Action Scheduler under load), closing a second way an image could get stuck "pending".
+* New (scale): a mass thumbnail regenerate (e.g. `wp media regenerate --all`) over a large flagged library no longer floods the queue. Immediate reprocess jobs are capped per run; beyond the cap, affected images are marked and drained in bounded batches by a self-rescheduling catch-up, so the backlog is worked off at a controlled rate instead of all at once.
+* Fix (UI): a bulk run's progress bar now always reconciles to 100% when it finishes. Previously, if some images already had a queued job when the run started (so their bulk job was deduped), the bar could finish stuck slightly below 100% even though every image was watermarked.
+* Change: the **"Every image in the library"** bulk scope has been removed from Bulk Tools and is rejected server-side. Watermarking the whole library at once is a heavy, hard-to-undo operation; flag the images you want (individually or by media-library bulk action) and run the flagged scope instead. (The Bulk Tools page is already restricted to administrators.)
+* Security: the queue no longer stores a raw exception message in post meta on a processing failure (it stores a fixed code and logs the detail under WP_DEBUG) — carried over and completed from 1.2.3.
+
+= 1.2.3 =
+* Fix (concurrency): the per-image lock heartbeat re-claimed a missing lock with a blind write, which — if the lock had genuinely lapsed and another worker acquired it in the gap — could let TWO workers process the same attachment at once (torn/double-processed served files). Re-claim now uses an atomic compare-and-swap (store-iff-absent) on both the object-cache and options backends, so a heartbeat can never overwrite a different owner. The pristine backup was always a hard floor against data loss; this closes the last window for a torn *served* image under heavy concurrency.
+* Fix (concurrency): raised the per-image lock lifetime from 300s to 1800s so a single slow stamp of a very large original (with the job time limit lifted) cannot outlive the lock between heartbeats and lapse mid-job. It now matches the stuck-job reaper's ceiling.
+* Security: a processing exception is now stored as a fixed reason code (`processing-exception`) instead of the raw throwable message, which routinely embedded absolute server paths and was shown in the media-list status tooltip. The full detail is written to the server error log under WP_DEBUG instead.
+* Performance (scale): the capability report option is no longer autoloaded (it is read only by admin/cron), and the optional "hide unstamped srcset candidates" filter now attaches to the front-end responsive-image path ONLY when that toggle is enabled — so a default install adds no per-request work to that hot path.
+
+= 1.2.2 =
+* Change: the "backups are in the public web directory" warning now renders only on the OG Watermark settings screen (and only loads its dismiss/re-check script there), instead of on every admin page. The background exposure probe and auto-clear behaviour are unchanged.
+* Fix: media-library status badges rendered as a uniform gray pill because the stylesheet defined status-named rules while the markup emits tone-named modifier classes. The badges are now colour-coded again — green "Watermarked", blue "Queued", amber "Out of date", red "Error"/"Too large"/"Backup missing", and gray "Too small"/"Skipped"/"Not flagged".
+
+= 1.2.1 =
+* Fix: text watermarks failed with a hard "Error" (status "failed") whenever the resolved text was wider than 90% of the image — which, because the point size scales with image width, happened for any moderately long watermark text at the default/high scale, on images of every size. The engine now **shrinks the text to fit** both the width and height budget (down to a legibility floor) before placing it, exactly as the code's own documentation always promised, so the mark is applied at a smaller size instead of the whole apply failing.
+* Fix: the "minimum size" setting (`min_dimension_px`, default 300px) is a THUMBNAIL guard, but it was also skipping the primary image the user explicitly flagged — turning a small full-size image into an "Error". The minimum-size skip is now applied only to generated intermediate sizes; the full image and the high-resolution original you flag are always marked (subject to fitting the mark at all).
+* New: a distinct **"Too small"** status (and neutral media-library badge) for an image that genuinely cannot carry the mark even after shrink-to-fit, instead of the red "Error" pill. This is a benign, informational outcome — not a failure.
+
+= 1.2.0 =
+* Improve: the backup-exposure admin notice (shown when the pristine-backup folder may be directly web-reachable on a server that ignores the plugin's per-directory deny files, e.g. nginx) is now **dismissible with a persisted dismissal** — clicking the X keeps it hidden across reloads, keyed to the current backup location so it re-appears only if that location changes. A **confirmed** exposure (one the plugin has actually fetched) is deliberately not dismissible, so a proven public exposure can never be one-click-hidden.
+* Improve: the notice is now **self-clearing**. Instead of deciding solely from the server-software name, the plugin performs a lightweight loopback check — fetching a harmless marker file at the backup folder's URL — and caches the verdict (refreshed via a background wp-cron event, never on the admin request path). Once you secure the folder (add a server-level deny rule, or move it above the web root), the next check marks it protected and the notice disappears — no version bump required. A **"Re-check now"** button re-measures on demand and removes the notice immediately when the folder is confirmed protected. The check is conservative: it only marks the folder "protected" on a proven block (HTTP 401/403/404) or when it is not under any web-served path, and falls back to the previous server-name heuristic when a probe is inconclusive, so a real exposure is never silently hidden.
+* Improve: the notice now shows only to users who can act on it (`manage_options`).
+* Note: no new relocation UI in this release — the recommended fix on nginx remains a server-level deny rule. A robust prefix form that cannot be shadowed by an image-extension location block: `location ^~ /wp-content/og-watermark-originals- { deny all; }` (adjust the prefix if your backups resolved under `/wp-content/uploads/`).
+
+= 1.1.2 =
+* Fix: completes the 1.1.1 "lock lost" fix for the OTHER lock backend. On hosts with no persistent object cache, the lock lives in the options table; some managed hosts (e.g. WordKeeper, via a "Speed > WP Options" read cache) return a stale "miss" for the freshly written, non-autoloaded lock row, so the heartbeat read it as gone and aborted with "lock lost" even though the watermark was being written. The options-backend heartbeat (and release) now self-heal exactly like the object-cache backend: they re-assert ownership on a stale/own read and fail only when a different live owner — or a genuinely lapsed lock — is positively read. Also hardened the heartbeat so it no longer treats an unchanged-value write (`update_option()` / `wp_cache_set()` returning false) as a lost lock.
 
 = 1.1.0 =
 * Fix: the live settings preview never displayed because the in-memory `data:` image URL was being stripped by URL sanitization. The preview now renders correctly; the plugin-generated data URL is validated against a strict image-data pattern instead of being run through the URL escaper.

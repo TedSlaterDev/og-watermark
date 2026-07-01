@@ -55,6 +55,12 @@ final class SchedulerTest extends TestCase {
 		Functions\when( 'get_post_meta' )->alias(
 			fn( $id, $key, $single = false ) => $this->meta[ (int) $id ][ $key ] ?? ''
 		);
+		Functions\when( 'delete_post_meta' )->alias(
+			function ( $id, $key ) {
+				unset( $this->meta[ (int) $id ][ $key ] );
+				return true;
+			}
+		);
 
 		Scheduler::$processorFactory      = null;
 		Scheduler::$forceActionScheduler = null;
@@ -96,18 +102,21 @@ final class SchedulerTest extends TestCase {
 		Scheduler::$forceActionScheduler = true;
 		// One async job carrying [ id, context, runToken ]. The third arg is the
 		// originating bulk run's lock token (here a non-bulk default of '').
+		// Returns a truthy action id on success — enqueue() now checks this and rolls
+		// the pending marker back on a falsy (0) return, so the stub must return truthy.
 		Functions\expect( 'as_enqueue_async_action' )
 			->once()
-			->with( Scheduler::HOOK, [ 77, 'bulk', '' ], 'og-watermark' );
+			->with( Scheduler::HOOK, [ 77, 'bulk', '' ], 'og-watermark' )
+			->andReturn( 123 );
 		// The cron one-shot must NOT be used when AS is present.
 		Functions\expect( 'wp_schedule_single_event' )->never();
 
 		$this->assertTrue( Scheduler::enqueue( 77, 'bulk' ) );
 
-		// The id-set marker was seeded even on the AS path — it is the dedup mechanism
+		// The per-id marker was seeded even on the AS path — it is the dedup mechanism
 		// on BOTH backends (as_has_scheduled_action is exact-args and can't match by
 		// id alone, so it is not relied on for dedup).
-		$this->assertArrayHasKey( 77, $this->options['ogwm_pending'] );
+		$this->assertSame( '1', $this->meta[77][ Meta::PENDING ] ?? null );
 		$this->assertTrue( Scheduler::isPending( 77 ) );
 	}
 
@@ -115,9 +124,29 @@ final class SchedulerTest extends TestCase {
 		Scheduler::$forceActionScheduler = true;
 		Functions\expect( 'as_enqueue_async_action' )
 			->once()
-			->with( Scheduler::HOOK, [ 77, 'bulk', 'run-tok-9' ], 'og-watermark' );
+			->with( Scheduler::HOOK, [ 77, 'bulk', 'run-tok-9' ], 'og-watermark' )
+			->andReturn( 123 );
 
 		$this->assertTrue( Scheduler::enqueue( 77, 'bulk', 'run-tok-9' ) );
+	}
+
+	public function testEnqueueRollsBackPendingMarkerWhenSchedulingIsRefused(): void {
+		// Action Scheduler degraded → 0 return. enqueue() must NOT leave the id stranded
+		// "pending"; it rolls the marker back and reports false so a later enqueue for
+		// the id is admitted (otherwise the image would silently never (re)watermark).
+		Scheduler::$forceActionScheduler = true;
+		Functions\when( 'as_enqueue_async_action' )->justReturn( 0 );
+
+		$this->assertFalse( Scheduler::enqueue( 77, 'bulk' ) );
+		$this->assertFalse( Scheduler::isPending( 77 ), 'a refused schedule must not strand the id as pending' );
+		$this->assertArrayNotHasKey( Meta::PENDING, $this->meta[77] ?? [] );
+
+		// Cron path: a pre_schedule_event short-circuit returns false → same rollback.
+		Scheduler::$forceActionScheduler = false;
+		Functions\when( 'wp_schedule_single_event' )->justReturn( false );
+
+		$this->assertFalse( Scheduler::enqueue( 88, 'bulk' ) );
+		$this->assertFalse( Scheduler::isPending( 88 ) );
 	}
 
 	public function testEnqueueDedupsByIdAcrossContextsOnActionSchedulerPath(): void {
@@ -156,8 +185,7 @@ final class SchedulerTest extends TestCase {
 
 		// The cron-path dedup marker was seeded so a same-id/other-context enqueue
 		// can be refused.
-		$this->assertArrayHasKey( 'ogwm_pending', $this->options );
-		$this->assertArrayHasKey( 88, $this->options['ogwm_pending'] );
+		$this->assertSame( '1', $this->meta[88][ Meta::PENDING ] ?? null );
 		$this->assertTrue( Scheduler::isPending( 88 ) );
 	}
 
@@ -181,9 +209,9 @@ final class SchedulerTest extends TestCase {
 		$this->assertFalse( Scheduler::isPending( 999 ) );
 	}
 
-	public function testIsPendingIgnoresCorruptPendingOption(): void {
+	public function testIsPendingFalseWhenNoMarkerMeta(): void {
 		Scheduler::$forceActionScheduler = false;
-		$this->options['ogwm_pending'] = 'not-an-array';
+		// No _ogwm_pending meta for this id → not pending.
 		$this->assertFalse( Scheduler::isPending( 5 ) );
 	}
 
@@ -215,8 +243,8 @@ final class SchedulerTest extends TestCase {
 	}
 
 	public function testRunJobClearsPendingMarkerOnSuccess(): void {
-		// Seed a cron-path pending marker (as enqueue() would have).
-		$this->options['ogwm_pending'] = [ 123 => true ];
+		// Seed a per-id pending marker (as enqueue() would have).
+		$this->meta[123][ Meta::PENDING ] = '1';
 
 		Scheduler::$processorFactory = static fn() => new class() {
 			public function process( int $id, string $context ): Outcome {
@@ -226,7 +254,8 @@ final class SchedulerTest extends TestCase {
 
 		Scheduler::runJob( 123, 'bulk' );
 
-		$this->assertArrayNotHasKey( 123, $this->options['ogwm_pending'], 'a finished job must clear its dedup marker' );
+		$this->assertArrayNotHasKey( Meta::PENDING, $this->meta[123] ?? [], 'a finished job must clear its dedup marker' );
+		$this->assertFalse( Scheduler::isPending( 123 ) );
 	}
 
 	// =====================================================================
@@ -235,7 +264,7 @@ final class SchedulerTest extends TestCase {
 
 	public function testRunJobSwallowsThrowableAndRecordsFailure(): void {
 		// Seed a pending marker so we can prove it's cleared in finally even on a throw.
-		$this->options['ogwm_pending'] = [ 200 => true ];
+		$this->meta[200][ Meta::PENDING ] = '1';
 
 		Scheduler::$processorFactory = static fn() => new class() {
 			public function process( int $id, string $context ): Outcome {
@@ -253,12 +282,16 @@ final class SchedulerTest extends TestCase {
 			$this->fail( 'runJob must swallow the processor throwable: ' . $e->getMessage() );
 		}
 
-		// The failure was recorded onto the attachment for the Media-column UI.
+		// The failure was recorded onto the attachment for the Media-column UI — as a
+		// FIXED reason code, NOT the raw throwable message (which routinely embeds
+		// absolute server paths and is shown in the media-list title to any user who
+		// can see the row).
 		$this->assertSame( Meta::STATUS_FAILED, $this->meta[200][ Meta::STATUS ] );
-		$this->assertSame( 'engine exploded mid-job', $this->meta[200][ Meta::LAST_ERROR ] );
+		$this->assertSame( 'processing-exception', $this->meta[200][ Meta::LAST_ERROR ] );
+		$this->assertStringNotContainsString( 'engine exploded', $this->meta[200][ Meta::LAST_ERROR ], 'the raw exception message must not be persisted' );
 
 		// The dedup marker was still cleared (finally), so a re-enqueue is admitted.
-		$this->assertArrayNotHasKey( 200, $this->options['ogwm_pending'] );
+		$this->assertArrayNotHasKey( Meta::PENDING, $this->meta[200] ?? [] );
 	}
 
 	public function testRunJobSwallowsThrowableFromTheFactoryItself(): void {
@@ -270,7 +303,7 @@ final class SchedulerTest extends TestCase {
 		Scheduler::runJob( 201, 'bulk' );
 
 		$this->assertSame( Meta::STATUS_FAILED, $this->meta[201][ Meta::STATUS ] );
-		$this->assertSame( 'factory blew up', $this->meta[201][ Meta::LAST_ERROR ] );
+		$this->assertSame( 'processing-exception', $this->meta[201][ Meta::LAST_ERROR ] );
 	}
 
 	public function testRunJobOnSuccessDoesNotRecordAFailure(): void {

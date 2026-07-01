@@ -260,7 +260,7 @@ final class Preview {
 	 * reason is always a fixed vocabulary and never echoes engine internals.
 	 */
 	private static function safeStatus( string $status ): string {
-		$known = [ Result::SKIPPED, Result::TOO_LARGE, Result::FAILED, Result::STAMPED ];
+		$known = [ Result::SKIPPED, Result::TOO_LARGE, Result::TOO_SMALL, Result::FAILED, Result::STAMPED ];
 		return in_array( $status, $known, true ) ? $status : 'failed';
 	}
 

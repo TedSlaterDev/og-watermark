@@ -29,6 +29,9 @@ final class Compositor {
 	/** Bundled font, relative to OGWM_DIR. Used for all text rendering. */
 	private const FONT_REL = 'assets/fonts/DejaVuSans-Bold.ttf';
 
+	/** Text shrink-to-fit height budget: the mark may fill at most this fraction of the image height. */
+	private const TEXT_HEIGHT_FRACTION = 0.9;
+
 	/** Raw-decode memory estimate multiplier: w*h*4 bytes * this fudge factor. */
 	private const MEMORY_FUDGE = 1.8;
 
@@ -95,16 +98,21 @@ final class Compositor {
 	 *
 	 * @param string              $srcPath  Absolute path to the (already-oriented) source image.
 	 * @param string              $destPath Absolute destination path (must differ from $srcPath).
-	 * @param string              $mime     Target MIME — honored exactly; format never changes.
-	 * @param array<string,mixed> $settings Grouped settings (Options shape).
-	 * @param string|null         $logoPath Validated local PNG path for logo mode, or null.
+	 * @param string              $mime      Target MIME — honored exactly; format never changes.
+	 * @param array<string,mixed> $settings  Grouped settings (Options shape).
+	 * @param string|null         $logoPath  Validated local PNG path for logo mode, or null.
+	 * @param bool                $isPrimary Whether this is the primary image the user flagged
+	 *                                       (the full / high-res original). The `min_dimension`
+	 *                                       thumbnail-skip is NOT enforced for it, so a small
+	 *                                       image the user deliberately flagged is still marked.
 	 */
 	public static function stamp(
 		string $srcPath,
 		string $destPath,
 		string $mime,
 		array $settings,
-		?string $logoPath
+		?string $logoPath,
+		bool $isPrimary = false
 	): Result {
 		$mime = strtolower( trim( $mime ) );
 
@@ -174,9 +182,9 @@ final class Compositor {
 			}
 
 			if ( 'logo' === $type ) {
-				$result = self::paintLogo( $driver, (string) $logoPath, $imgW, $imgH, $settings );
+				$result = self::paintLogo( $driver, (string) $logoPath, $imgW, $imgH, $settings, $isPrimary );
 			} else {
-				$result = self::paintText( $driver, $imgW, $imgH, $settings );
+				$result = self::paintText( $driver, $imgW, $imgH, $settings, $isPrimary );
 			}
 
 			if ( ! $result->isOk() ) {
@@ -216,7 +224,8 @@ final class Compositor {
 		string $logoPath,
 		int $imgW,
 		int $imgH,
-		array $settings
+		array $settings,
+		bool $isPrimary = false
 	): Result {
 		$logoSize = self::sourceDimensions( $logoPath );
 		if ( null === $logoSize ) {
@@ -224,9 +233,17 @@ final class Compositor {
 		}
 		[ $logoW, $logoH ] = $logoSize;
 
-		$placement = Geometry::logoPlacement( $imgW, $imgH, $logoW, $logoH, $settings );
+		$placement = Geometry::logoPlacement( $imgW, $imgH, $logoW, $logoH, $settings, ! $isPrimary );
 		if ( null === $placement ) {
-			return Result::skipped( 'image too small for logo placement' );
+			// Geometry collapses two distinct causes into null. Disambiguate so the
+			// status is honest: the image being below the (enforced) min_dimension is a
+			// benign 'too small'; otherwise the scaled logo exceeded the width budget —
+			// the mark is too BIG for this image (lower the logo scale), a real skip.
+			$minDim = self::intSetting( $settings, 'sizes', 'min_dimension_px', 0 );
+			if ( ! $isPrimary && min( $imgW, $imgH ) < $minDim ) {
+				return Result::tooSmall( 'image too small for logo placement' );
+			}
+			return Result::skipped( 'logo too large for image at current scale' );
 		}
 
 		$driver->paint_logo( $logoPath, $placement );
@@ -243,7 +260,8 @@ final class Compositor {
 		Watermarker $driver,
 		int $imgW,
 		int $imgH,
-		array $settings
+		array $settings,
+		bool $isPrimary = false
 	): Result {
 		$template = self::stringSetting( $settings, 'watermark', 'text', '' );
 		$text     = TokenResolver::resolve( $template );
@@ -263,14 +281,49 @@ final class Compositor {
 			return Result::skipped( 'could not measure watermark text' );
 		}
 
-		$placement = Geometry::textPlacement( $imgW, $imgH, $textW, $textH, $settings );
+		// Shrink-to-fit: pointSize() sizes text off image WIDTH, but a long string
+		// (or a short image) can still overflow the width/height budget. Reduce the
+		// point size until the measured box fits, down to Geometry::MIN_PT, so a
+		// legible mark is stamped instead of failing the image (SPEC: shrink-to-fit).
+		[ $sizePt, $textW, $textH ] = self::fitText( $text, $fontPath, $sizePt, $imgW, $imgH );
+
+		// If even the smallest legible size cannot fit the image, it is genuinely
+		// too small to carry text — a benign skip, not an error.
+		if ( $textH > $imgH * self::TEXT_HEIGHT_FRACTION ) {
+			return Result::tooSmall( 'image too small for text placement' );
+		}
+
+		$placement = Geometry::textPlacement( $imgW, $imgH, $textW, $textH, $settings, ! $isPrimary );
 		if ( null === $placement ) {
-			return Result::skipped( 'image too small for text placement' );
+			return Result::tooSmall( 'image too small for text placement' );
 		}
 
 		$spec = self::buildTextSpec( $text, $fontPath, $sizePt, $settings );
 		$driver->paint_text( $spec, $placement );
 		return Result::stamped();
+	}
+
+	/**
+	 * Reduce the point size until the measured text box fits both the width budget
+	 * (Geometry::MAX_WIDTH_FRACTION of the image width) and the height budget
+	 * (TEXT_HEIGHT_FRACTION of the image height), clamped to Geometry::MIN_PT. The
+	 * bounding box is not perfectly linear in point size, so we iterate a few times.
+	 *
+	 * @return array{0:float,1:int,2:int} [ fitted point size, width, height ] in px.
+	 */
+	private static function fitText( string $text, string $fontPath, float $sizePt, int $imgW, int $imgH ): array {
+		$maxW = $imgW * Geometry::MAX_WIDTH_FRACTION;
+		$maxH = $imgH * self::TEXT_HEIGHT_FRACTION;
+
+		[ $w, $h ] = self::measureText( $text, $fontPath, $sizePt );
+
+		for ( $i = 0; $i < 6 && ( $w > $maxW || $h > $maxH ) && $sizePt > Geometry::MIN_PT; $i++ ) {
+			$ratio  = min( $maxW / max( 1, $w ), $maxH / max( 1, $h ) );
+			$sizePt = max( Geometry::MIN_PT, $sizePt * $ratio );
+			[ $w, $h ] = self::measureText( $text, $fontPath, $sizePt );
+		}
+
+		return [ $sizePt, $w, $h ];
 	}
 
 	/**
@@ -472,6 +525,21 @@ final class Compositor {
 			$value = $settings[ $group ][ $key ];
 			if ( is_scalar( $value ) ) {
 				return (string) $value;
+			}
+		}
+		return $default;
+	}
+
+	/**
+	 * Read a nested int setting from the grouped array.
+	 *
+	 * @param array<string,mixed> $settings
+	 */
+	private static function intSetting( array $settings, string $group, string $key, int $default ): int {
+		if ( isset( $settings[ $group ] ) && is_array( $settings[ $group ] ) && isset( $settings[ $group ][ $key ] ) ) {
+			$value = $settings[ $group ][ $key ];
+			if ( is_scalar( $value ) ) {
+				return (int) $value;
 			}
 		}
 		return $default;

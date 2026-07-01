@@ -54,18 +54,24 @@ final class SrcsetTest extends TestCase {
 	// register() wires the documented filter.
 	// =====================================================================
 
-	public function testRegisterAddsTheSrcsetFilter(): void {
+	public function testRegisterAddsTheSrcsetFilterOnlyWhenEnabled(): void {
 		$captured = [];
 		Functions\when( 'add_filter' )->alias(
 			static function ( $hook, $cb, $priority = 10, $args = 1 ) use ( &$captured ): void {
-				$captured = [ $hook, $cb, $priority, $args ];
+				$captured[] = [ $hook, $cb, $priority, $args ];
 			}
 		);
 
+		// Default (opt-in toggle OFF) → NO front-end filter is attached, so a normal
+		// install adds zero hooks to the responsive-image hot path.
 		Srcset::register();
+		$this->assertSame( [], $captured, 'no srcset filter when the toggle is off (default)' );
 
+		// Toggle ON → the documented filter is wired at the default priority.
+		$this->options[ Options::OPTION ] = [ 'output' => [ 'srcset_hide_unstamped' => true ] ];
+		Srcset::register();
 		$this->assertSame(
-			[ 'wp_calculate_image_srcset', [ Srcset::class, 'filter' ], 10, 5 ],
+			[ [ 'wp_calculate_image_srcset', [ Srcset::class, 'filter' ], 10, 5 ] ],
 			$captured
 		);
 	}

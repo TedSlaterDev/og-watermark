@@ -26,16 +26,16 @@ use Throwable;
  *  2. No Action Scheduler → `wp_schedule_single_event` one-shot a second out.
  *
  * DEDUP IS BACKEND-AGNOSTIC. Both backends key on attachment id only (regardless
- * of $context or run identity), via a plain id-set tracked in the `ogwm_pending`
- * option (autoload off). This is deliberate:
+ * of $context or run identity), via a PER-ID `_ogwm_pending` post-meta marker. This
+ * is deliberate:
  *
  *  - On the cron path wp_next_scheduled() matches the EXACT hook args, so it
- *    cannot see a same-id/different-context duplicate; the id-set fixes that.
+ *    cannot see a same-id/different-context duplicate; the marker fixes that.
  *  - On the Action Scheduler path as_has_scheduled_action() does a FULL exact
  *    args comparison too (a partial args array is NOT a wildcard — AS hashes the
  *    whole serialized array), so it likewise cannot dedup across contexts/run
- *    tokens. The id-set is the one mechanism that dedups correctly on both, so a
- *    thundering herd of flag/regenerate/bulk triggers for the same id collapses
+ *    tokens. The per-id marker is the one mechanism that dedups correctly on both,
+ *    so a thundering herd of flag/regenerate/bulk triggers for the same id collapses
  *    to a single scheduled job on every host.
  *
  * The job handler is hardened so a single bad attachment can NEVER fatal cron /
@@ -59,14 +59,6 @@ final class Scheduler {
 
 	/** Action Scheduler group, so our jobs are isolated/inspectable. */
 	private const AS_GROUP = 'og-watermark';
-
-	/**
-	 * Option holding the dedup id-set: a map of attachment id => true. Autoload is
-	 * forced off (it is request-transient queue bookkeeping, not always-loaded
-	 * config). Consulted/maintained on BOTH backends — neither wp_next_scheduled()
-	 * nor as_has_scheduled_action() can dedup by id alone (both are exact-args).
-	 */
-	private const PENDING_OPTION = 'ogwm_pending';
 
 	/**
 	 * Test seam: a factory that returns the Processor used by {@see runJob()}.
@@ -113,32 +105,40 @@ final class Scheduler {
 			return false;
 		}
 
-		// Seed the id-set marker on BOTH paths so a same-id/other-context (or
-		// other-run) enqueue is refused regardless of backend — the only mechanism
-		// that dedups by id alone (both scheduler lookups are exact-args).
+		// Seed the per-id marker BEFORE scheduling so a same-id/other-context (or
+		// other-run) enqueue racing us is refused (the only mechanism that dedups by id
+		// alone — both scheduler lookups are exact-args).
 		self::markPending( $id );
 
-		if ( self::usesActionScheduler() ) {
-			as_enqueue_async_action( self::HOOK, [ $id, $context, $runToken ], self::AS_GROUP );
-			return true;
+		// Schedule, and CHECK the result. as_enqueue_async_action() returns 0 when
+		// Action Scheduler is degraded; wp_schedule_single_event() returns false when a
+		// cron-replacement plugin short-circuits pre_schedule_event. If scheduling was
+		// refused we MUST roll the marker back — otherwise the id is stranded "pending"
+		// forever and would silently never (re)watermark, with no status change and no
+		// self-heal. (This is the same stranding class the per-id marker set out to end.)
+		$scheduled = self::usesActionScheduler()
+			? (bool) as_enqueue_async_action( self::HOOK, [ $id, $context, $runToken ], self::AS_GROUP )
+			: ( false !== wp_schedule_single_event( time() + 1, self::HOOK, [ $id, $context, $runToken ] ) );
+
+		if ( ! $scheduled ) {
+			self::clearPending( $id );
+			return false;
 		}
 
-		// wp-cron fallback: a one-shot event a second out (so it never runs inside
-		// THIS request).
-		wp_schedule_single_event( time() + 1, self::HOOK, [ $id, $context, $runToken ] );
 		return true;
 	}
 
 	/**
 	 * Whether a job for $id is already scheduled. Keyed on attachment id ONLY (any
-	 * context, any run) via the {@see PENDING_OPTION} id-set on both backends — the
-	 * one dedup mechanism that holds when wp_next_scheduled()/as_has_scheduled_action()
-	 * are both exact-args.
+	 * context, any run) via a PER-ID `_ogwm_pending` post-meta marker — the one dedup
+	 * mechanism that holds when wp_next_scheduled()/as_has_scheduled_action() are both
+	 * exact-args. Per-id (not a shared option array) so a concurrent clear of one id
+	 * can never lose another id's marker and strand it as permanently "pending".
 	 *
 	 * @param int $id Attachment id.
 	 */
 	public static function isPending( int $id ): bool {
-		return isset( self::pendingSet()[ $id ] );
+		return '1' === (string) get_post_meta( $id, Meta::PENDING, true );
 	}
 
 	/**
@@ -166,8 +166,15 @@ final class Scheduler {
 			self::recordBulkResult( $ok, $runToken );
 		} catch ( Throwable $e ) {
 			// A single bad attachment must NEVER bring down cron / Action Scheduler.
-			// Persist the failure for the Media-column UI and swallow the throwable.
-			update_post_meta( $id, Meta::LAST_ERROR, $e->getMessage() );
+			// Persist a FIXED reason code — never the raw throwable message: a
+			// GD/Imagick/filesystem exception routinely embeds absolute server paths,
+			// and LAST_ERROR is surfaced in the Media-column title to any user who can
+			// see the row. The detail is logged server-side (under WP_DEBUG) for
+			// operators instead of being stored in postmeta.
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG && function_exists( 'error_log' ) ) {
+				error_log( 'OG Watermark: processing exception for attachment ' . $id . ': ' . $e->getMessage() ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+			}
+			update_post_meta( $id, Meta::LAST_ERROR, 'processing-exception' );
 			update_post_meta( $id, Meta::STATUS, Meta::STATUS_FAILED );
 			self::recordBulkResult( false, $runToken );
 		} finally {
@@ -243,43 +250,21 @@ final class Scheduler {
 	}
 
 	// ---------------------------------------------------------------------
-	// Dedup id-set (ogwm_pending option).
+	// Per-id dedup marker (_ogwm_pending post meta).
+	//
+	// Each attachment carries its OWN marker, so two concurrent workers clearing
+	// DIFFERENT ids never collide on a shared array (the old `ogwm_pending` option
+	// lost writes under last-writer-wins, stranding ids as permanently "pending").
 	// ---------------------------------------------------------------------
 
-	/** Add $id to the pending id-set. */
+	/** Mark $id as having a scheduled job. */
 	private static function markPending( int $id ): void {
-		$set        = self::pendingSet();
-		$set[ $id ] = true;
-		update_option( self::PENDING_OPTION, $set, false );
+		update_post_meta( $id, Meta::PENDING, '1' );
 	}
 
-	/** Remove $id from the pending id-set (no write when absent). */
+	/** Clear $id's scheduled-job marker (delete is a no-op when absent). */
 	private static function clearPending( int $id ): void {
-		$set = self::pendingSet();
-		if ( ! isset( $set[ $id ] ) ) {
-			return;
-		}
-		unset( $set[ $id ] );
-		update_option( self::PENDING_OPTION, $set, false );
-	}
-
-	/**
-	 * The pending id-set: a map of attachment id => true. Always an array (a
-	 * corrupt/absent option yields []).
-	 *
-	 * @return array<int,bool>
-	 */
-	private static function pendingSet(): array {
-		$set = get_option( self::PENDING_OPTION, [] );
-		if ( ! is_array( $set ) ) {
-			return [];
-		}
-
-		$clean = [];
-		foreach ( $set as $key => $value ) {
-			$clean[ (int) $key ] = (bool) $value;
-		}
-		return $clean;
+		delete_post_meta( $id, Meta::PENDING );
 	}
 
 	/**

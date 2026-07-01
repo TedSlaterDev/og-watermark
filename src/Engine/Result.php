@@ -8,16 +8,18 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Small immutable status object returned by Compositor::stamp() for one file.
  *
- * The four factories map onto the outcomes the processor (M4) records as the
- * per-size result: a successful stamp, a deliberate format-policy skip (with a
- * human reason), a memory pre-flight bail, or a hard failure. The reason string
- * is safe to log/surface; it never contains a filesystem path.
+ * The factories map onto the outcomes the processor (M4) records as the per-size
+ * result: a successful stamp, a deliberate format-policy skip (with a human
+ * reason), a memory pre-flight bail, an image too small to carry a mark, or a
+ * hard failure. The reason string is safe to log/surface; it never contains a
+ * filesystem path.
  */
 final class Result {
 
 	public const STAMPED   = 'stamped';
 	public const SKIPPED   = 'skipped';
 	public const TOO_LARGE = 'too_large';
+	public const TOO_SMALL = 'too_small';
 	public const FAILED    = 'failed';
 
 	private function __construct(
@@ -38,6 +40,14 @@ final class Result {
 	/** Skipped because the decode would exceed the memory budget for this host. */
 	public static function tooLarge(): self {
 		return new self( self::TOO_LARGE, 'image exceeds memory budget' );
+	}
+
+	/**
+	 * Not stamped because the image is too small to carry the mark even after
+	 * shrink-to-fit (a benign, expected outcome for tiny images — NOT a failure).
+	 */
+	public static function tooSmall( string $reason ): self {
+		return new self( self::TOO_SMALL, $reason );
 	}
 
 	/** A real failure (bad decode, unwritable destination, driver error). */

@@ -59,10 +59,20 @@ final class MetadataListenerTest extends TestCase {
 				return true;
 			}
 		);
+		Functions\when( 'delete_post_meta' )->alias(
+			function ( $id, $key ) {
+				unset( $this->meta[ (int) $id ][ $key ] );
+				return true;
+			}
+		);
 
 		// Pin the wp-cron fallback so enqueue() is deterministic (Action Scheduler is
 		// genuinely absent in this environment).
 		Scheduler::$forceActionScheduler = false;
+
+		// Reset the per-process burst counter (a static that would otherwise leak
+		// across tests and skew the mass-regenerate cap assertions).
+		( new \ReflectionClass( MetadataListener::class ) )->getProperty( 'burst' )->setValue( null, 0 );
 	}
 
 	protected function tearDown(): void {
@@ -130,9 +140,8 @@ final class MetadataListenerTest extends TestCase {
 			$cronArgs,
 			'the reprocess must be enqueued in the regenerate context with no bulk run token'
 		);
-		// ...and it is recorded in the dedup id-set keyed on this attachment id.
-		$this->assertArrayHasKey( 'ogwm_pending', $this->options );
-		$this->assertArrayHasKey( 77, $this->options['ogwm_pending'] );
+		// ...and it is recorded in the per-id dedup marker for this attachment.
+		$this->assertSame( '1', $this->meta[77][ Meta::PENDING ] ?? null );
 		$this->assertTrue( Scheduler::isPending( 77 ) );
 
 		// The metadata is returned verbatim — we NEVER stamp/mutate inline here.
@@ -229,6 +238,66 @@ final class MetadataListenerTest extends TestCase {
 
 		$this->assertFalse( $returned, 'a non-array meta must be returned verbatim' );
 		$this->assertFalse( Scheduler::isPending( 101 ), 'no job may be scheduled for a non-array meta payload' );
+	}
+
+	public function testMassRegenerateBurstDefersOverflowToAReprocessMarker(): void {
+		$cap = ( new \ReflectionClass( MetadataListener::class ) )->getConstant( 'BURST_CAP' );
+		$this->assertIsInt( $cap );
+
+		Functions\when( 'wp_schedule_single_event' )->justReturn( true );
+		Functions\when( 'wp_next_scheduled' )->justReturn( false );
+
+		$meta = [ 'file' => 'x.jpg', 'sizes' => [] ];
+
+		// The first $cap flagged regenerates enqueue immediately (per-id pending marker).
+		for ( $id = 1; $id <= $cap; $id++ ) {
+			$this->flag( $id );
+			MetadataListener::onGenerate( $meta, $id, 'update' );
+			$this->assertTrue( Scheduler::isPending( $id ), "id $id must enqueue immediately under the cap" );
+		}
+
+		// The NEXT flagged regenerate crosses the cap → DEFERRED: marked for the drain,
+		// NOT enqueued immediately (so a mass regenerate cannot flood the queue).
+		$over = $cap + 1;
+		$this->flag( $over );
+		MetadataListener::onGenerate( $meta, $over, 'update' );
+
+		$this->assertSame( '1', $this->meta[ $over ][ Meta::REPROCESS ] ?? null, 'the overflow attachment is marked for the drain' );
+		$this->assertFalse( Scheduler::isPending( $over ), 'the overflow attachment is NOT enqueued immediately' );
+	}
+
+	public function testDrainEnqueuesReprocessMarkedAttachmentsAndClearsTheirMarker(): void {
+		Functions\when( 'wp_schedule_single_event' )->justReturn( true );
+		Functions\when( 'wp_next_scheduled' )->justReturn( false );
+
+		$dirty = [ 11, 22, 33 ];
+		foreach ( $dirty as $id ) {
+			$this->meta[ $id ][ Meta::REPROCESS ] = '1';
+		}
+		Functions\when( 'get_posts' )->justReturn( $dirty );
+
+		MetadataListener::drain();
+
+		foreach ( $dirty as $id ) {
+			$this->assertTrue( Scheduler::isPending( $id ), "id $id enqueued by the drain" );
+			$this->assertArrayNotHasKey( Meta::REPROCESS, $this->meta[ $id ] ?? [], "id $id's reprocess marker cleared" );
+		}
+	}
+
+	public function testDrainKeepsTheMarkerWhenSchedulingIsRefused(): void {
+		// The reprocess could not be scheduled AND no job is pending (a cron-replacement
+		// short-circuit): the drain must LEAVE the marker so a later pass retries it,
+		// rather than dropping it and stranding the image un-watermarked.
+		Functions\when( 'wp_schedule_single_event' )->justReturn( false );
+		Functions\when( 'wp_next_scheduled' )->justReturn( false );
+
+		$this->meta[44][ Meta::REPROCESS ] = '1';
+		Functions\when( 'get_posts' )->justReturn( [ 44 ] );
+
+		MetadataListener::drain();
+
+		$this->assertSame( '1', $this->meta[44][ Meta::REPROCESS ] ?? null, 'marker kept when the reprocess could not be scheduled' );
+		$this->assertFalse( Scheduler::isPending( 44 ), 'no phantom pending marker is left either' );
 	}
 
 	// =====================================================================
