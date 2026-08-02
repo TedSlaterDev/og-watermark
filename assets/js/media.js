@@ -75,6 +75,31 @@
 
 		if ( holder ) {
 			holder.innerHTML = html;
+			// The media-frame control hides an EMPTY holder inline; un-hide now that
+			// it has a badge. The pill's geometry is inlined too (keep in sync with
+			// media-frame.js buildControl): host admin themes have been seen forcing
+			// display/padding onto it, and a stale-cached stylesheet can't be relied
+			// on — only the tone COLORS are left to the stylesheet classes.
+			holder.style.display = '';
+			var pill = holder.querySelector( '.ogwm-badge' );
+			if ( pill ) {
+				var geom = {
+					display: 'inline-flex',
+					alignItems: 'center',
+					gap: '4px',
+					padding: '2px 9px',
+					borderRadius: '999px',
+					fontSize: '12px',
+					lineHeight: '18px',
+					fontWeight: '600',
+					whiteSpace: 'nowrap'
+				};
+				for ( var k in geom ) {
+					if ( Object.prototype.hasOwnProperty.call( geom, k ) ) {
+						pill.style[ k ] = geom[ k ];
+					}
+				}
+			}
 		} else if ( existing ) {
 			existing.outerHTML = html;
 		}

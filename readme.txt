@@ -4,7 +4,7 @@ Tags: watermark, images, media, branding, copyright
 Requires at least: 6.0
 Tested up to: 6.8
 Requires PHP: 8.1
-Stable tag: 1.2.6
+Stable tag: 1.2.9
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -150,6 +150,15 @@ maintenance schedule, set up automatically the first time the site loads.
 
 == Upgrade Notice ==
 
+= 1.2.9 =
+Fixes the media pop-up's OG Watermark row rendering broken/stacked when a CDN serves a cached older stylesheet: the control's layout now ships inside the script itself, so it can no longer be mangled by stylesheet caching. Also keeps the status pill on one line. Recommended if the row looked wrong after 1.2.8.
+
+= 1.2.8 =
+Polishes the media pop-up's OG Watermark row: the label now sits right-aligned beside the buttons like the native fields (no more stacked/wrapped layout), and the row shows the image's current status badge (Watermarked / Queued / Not flagged) immediately instead of only after a click. Cosmetic only.
+
+= 1.2.7 =
+Fixes the placement of the Watermark/Remove control in the media pop-up's details sidebar (e.g. the featured-image picker): it previously wrapped up beside the Title/Caption fields; it now sits in its own labeled row at the bottom of the section, styled like the native fields. Cosmetic only.
+
 = 1.2.6 =
 Adds Watermark / Remove buttons to the "Attachment details" of the media pop-up — including the panel you get when setting or changing a post's featured image, where WordPress does not otherwise show the plugin's controls.
 
@@ -190,6 +199,17 @@ support, and lifecycle hardening (clean deactivation/uninstall). Safe upgrade
 from 0.7.0; your settings and backups are preserved.
 
 == Changelog ==
+
+= 1.2.9 =
+* Fix (UI): the OG Watermark row in the media pop-up could render stacked and misaligned — label wrapped on its own lines, the status pill breaking in two, buttons stranded at the left edge — when a CDN or aggressive cache served an **older cached copy of the plugin stylesheet** against the new script (some CDN configurations ignore the `?ver=` cache-buster on static assets). The control's layout now ships **inline within the script that builds it**, so the markup and its geometry are always the same version and stylesheet caching can no longer break the row. The stylesheet rules remain only as a fallback for cached older scripts.
+* Fix (UI): the status pill ("Not flagged", "Watermarked …") no longer wraps onto two lines in the narrow sidebar column, and an empty badge no longer reserves blank space before the first action.
+
+= 1.2.8 =
+* Improve (UI): the OG Watermark row in the media pop-up's "Attachment details" now matches the native field geometry — the label sits right-aligned in the label column with the buttons beside it in the field column, instead of the label wrapping onto two lines with the buttons dropping underneath.
+* Improve (UI): the row now shows the image's **current status badge** (Watermarked / Queued / Out of date / Not flagged, with its date) as soon as the panel opens — recovered from the attachment data WordPress already sends — instead of appearing only after clicking a button.
+
+= 1.2.7 =
+* Fix (UI): the Watermark/Remove control injected into the media pop-up's "Attachment details" sidebar (introduced in 1.2.6) rendered in the wrong place — WordPress floats the label/field rows there, and the control's non-clearing box wrapped **up beside** the Title/Caption fields instead of below them. The control is now a native-style setting row ("OG Watermark" label in the label column, buttons in the field column) that clears the floats, so it sits at the **bottom of the details section**, after the File URL row, in every media frame. Cosmetic only — behavior is unchanged.
 
 = 1.2.6 =
 * New: **Watermark** and **Remove** buttons in the media pop-up's "Attachment details" sidebar — most usefully the panel that opens when you **set or change a post's featured image**, where WordPress does not render the plugin's attachment field, so the controls were previously missing there. The buttons use the same secured per-image AJAX (capability + nonce) as the media-library controls, and are added by extending the media views (guarded so they never duplicate the control WordPress already shows in the media-library modal, and only for image attachments). Works in both the classic and block editors' featured-image pickers.

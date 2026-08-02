@@ -696,21 +696,43 @@
 	color: #2c4f22;
 }
 
-/* ---------- Watermark control injected into the media-modal details sidebar ---------- */
+/* ---------- Watermark control injected into the media-modal details sidebar ----------
+   NOTE: the LOAD-BEARING layout for this control ships as INLINE styles in
+   media-frame.js (one versioned file — immune to a CDN serving a stale copy of
+   this stylesheet against newer JS, which mangled the layout in production).
+   These rules mirror those inline styles purely as a fallback for any cached
+   pre-1.2.9 media-frame.js output; keep the two in sync. */
 .ogwm-media-detail {
 	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: .35rem;
-	margin-top: .75rem;
-	padding-top: .6rem;
+	align-items: flex-start;
+	float: left;
+	clear: both;
+	width: 100%;
+	grid-column: 1 / -1;
+	margin: 14px 0 0;
+	padding-top: 12px;
 	border-top: 1px solid #dcdcde;
 }
-.ogwm-media-detail .ogwm-field-label {
-	width: 100%;
-	font-weight: 600;
-	color: #50575e;
+.ogwm-media-detail .name {
+	flex: 0 0 30%;
+	margin-right: 4%;
+	text-align: right;
+	padding-top: 4px; /* optically aligns the label with the small buttons */
+}
+.ogwm-media-detail .ogwm-field-value {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 7px;
 }
 .ogwm-media-detail .ogwm-field-badge:empty {
 	display: none;
+}
+.ogwm-media-detail .ogwm-field-actions {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
 }
